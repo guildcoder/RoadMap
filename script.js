@@ -8,7 +8,8 @@
   const TICK_MS = 40;          // game tick (ms) -> 25 FPS
   const LOOK_AHEAD = 12;       // how many cells bots look ahead for safety
   const BOT_RANDOM_TURN = 0.02;// chance bots make a random turn for variety
-
+canvas.width = 800;
+canvas.height = 600;
   // DOM
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
