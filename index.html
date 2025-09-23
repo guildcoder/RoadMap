@@ -1,39 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Street Drive Mini Game</title>
-
-  <!-- iOS PWA / WebApp meta -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Street Drive">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="manifest" href="manifest.json">
-
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tron Light Bike — Bots</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="game">
-    <!-- Street View container -->
-    <div id="streetview"></div>
-
-    <!-- Overlay UI -->
+  <div id="ui">
     <div id="overlay">
-      <img id="car" src="assets/car.gif" alt="car">
-      <div id="controls">
-        <img id="brake" class="pedal" src="assets/brake.png" alt="brake">
-        <img id="gas" class="pedal" src="assets/gas.png" alt="gas">
-      </div>
-      <div id="speedometer">0</div>
+      <h1>Tron: Light-Bike</h1>
+      <label>
+        Your name
+        <input id="playerName" type="text" placeholder="Player" maxlength="20" />
+      </label>
+      <label>
+        Bots
+        <input id="botCount" type="range" min="1" max="8" value="3" />
+        <span id="botCountLabel">3</span>
+      </label>
+      <button id="startBtn">Start Game</button>
+      <small>Controls: Arrow keys or WASD</small>
     </div>
+
+    <div id="topbar" class="hidden">
+      <div id="status">Alive: —</div>
+      <button id="restartBtn">Restart</button>
+    </div>
+
+    <div id="message" class="hidden"></div>
   </div>
 
-  <script src="script.js"></script>
-  <!-- Google Maps JS API (replace YOUR_API_KEY) -->
-  <script async 
-          src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap">
-  </script>
+  <canvas id="gameCanvas"></canvas>
+
+  <script src="script.js" defer></script>
 </body>
 </html>
