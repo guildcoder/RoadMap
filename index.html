@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <title>DIGIBIKE ROYALE</title>
-  <style>
-    body { margin:0; background:black; overflow:hidden; }
-    canvas { display:block; margin:0 auto; background:#000; }
-  </style>
+<meta charset="utf-8"/>
+<title>DIGIBIKE ROYALE</title>
+<style>
+  body { margin:0; overflow:hidden; background:black; }
+  canvas { display:block; }
+</style>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -14,49 +14,57 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const MAP_SIZE = 2500;
+let MAP_SIZE = 2500;
 const PLAYER_COUNT = 20;
 const TRAIL_POINT_LIMIT = 40;
 const SPEED = 250;
 const PLAYER_SIZE = 10;
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 
 let keys = {};
 document.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
 document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
 class Player {
-  constructor(x, y, dir, color, isBot=false) {
-    this.x = x; this.y = y;
-    this.dir = dir; this.color = color;
-    this.isBot = isBot;
-    this.trail = [];
-    this.alive = true;
-    this.speed = SPEED;
-    this.turnCooldown = 0;
+  constructor(x, y, dir, color, isBot=false){
+    this.x=x; this.y=y;
+    this.dir=dir; this.color=color;
+    this.isBot=isBot;
+    this.trail=[];
+    this.alive=true;
+    this.speed=SPEED;
+    this.turnCooldown=0;
   }
-  recordTrailPoint(x,y){ this.trail.push({x,y}); if(this.trail.length>TRAIL_POINT_LIMIT) this.trail.shift(); }
+  recordTrail(){ this.trail.push({x:this.x, y:this.y}); if(this.trail.length>TRAIL_POINT_LIMIT)this.trail.shift(); }
   die(){ this.alive=false; }
 }
 
-let players = [];
-let player = new Player(MAP_SIZE/2, MAP_SIZE/2, 0, "cyan", false);
+let players=[];
+let player=new Player(MAP_SIZE/2, MAP_SIZE/2, 0, "cyan", false);
 players.push(player);
 
 // spawn bots
 for(let i=0;i<PLAYER_COUNT-1;i++){
-  let bot = new Player(Math.random()*MAP_SIZE, Math.random()*MAP_SIZE,
-      [0, Math.PI/2, Math.PI, -Math.PI/2][Math.floor(Math.random()*4)],
-      "hsl("+Math.random()*360+",100%,50%)", true);
+  let bot = new Player(
+    Math.random()*MAP_SIZE,
+    Math.random()*MAP_SIZE,
+    [0, Math.PI/2, Math.PI, -Math.PI/2][Math.floor(Math.random()*4)],
+    "hsl("+Math.random()*360+",100%,50%)",
+    true
+  );
   players.push(bot);
 }
 
 let spectator=false;
 function enableSpectator(){ spectator=true; }
 
-function checkTrailCollisionFor(p){
+function checkCollision(p){
   for(let other of players){
     if(!other.alive) continue;
     for(let pt of other.trail){
@@ -66,25 +74,20 @@ function checkTrailCollisionFor(p){
   return false;
 }
 
-// storm
-let stormSize = MAP_SIZE;
-let stormTimer = 10;
-let shrinking = false;
+// Storm
+let stormSize=MAP_SIZE;
+let stormTimer=10;
+let shrinking=false;
 function updateStorm(dt){
   stormTimer -= dt/1000;
-  if(stormTimer <= 0){
+  if(stormTimer<=0){
     if(!shrinking){ shrinking=true; stormTimer=5; }
     else { shrinking=false; stormTimer=10; }
   }
   if(shrinking){ stormSize -= 50*dt/1000; if(stormSize<200) stormSize=200; }
 }
 
-// minimap toggle
-let showLargeMap=false;
-document.addEventListener("keydown", e => { if(e.key==="R" && e.shiftKey) showLargeMap=true; });
-document.addEventListener("keyup", e => { if(e.key==="r") showLargeMap=false; });
-
-// simulation loop
+// Simulation
 let last=performance.now();
 function loop(now){
   let dt=now-last; last=now;
@@ -98,31 +101,32 @@ function simulate(dt){
   updateStorm(dt);
   const stormX=(MAP_SIZE-stormSize)/2;
   const stormY=(MAP_SIZE-stormSize)/2;
-  const stormRight=stormX+stormSize;
-  const stormBottom=stormY+stormSize;
+  const stormR=stormX+stormSize;
+  const stormB=stormY+stormSize;
 
-  // PLAYER movement
+  // player movement
   if(player.alive){
-    if(keys['arrowup'] || keys['w']) player.dir=-Math.PI/2;
-    else if(keys['arrowdown'] || keys['s']) player.dir=Math.PI/2;
-    else if(keys['arrowleft'] || keys['a']) player.dir=Math.PI;
-    else if(keys['arrowright'] || keys['d']) player.dir=0;
+    if(keys['arrowup']||keys['w']) player.dir=-Math.PI/2;
+    else if(keys['arrowdown']||keys['s']) player.dir=Math.PI/2;
+    else if(keys['arrowleft']||keys['a']) player.dir=Math.PI;
+    else if(keys['arrowright']||keys['d']) player.dir=0;
 
     player.x += Math.cos(player.dir)*player.speed*dt/1000;
     player.y += Math.sin(player.dir)*player.speed*dt/1000;
-    player.recordTrailPoint(player.x,player.y);
+    player.recordTrail();
 
-    if(checkTrailCollisionFor(player) || player.x<stormX || player.x>stormRight || player.y<stormY || player.y>stormBottom){
-      player.die(); enableSpectator();
+    if(checkCollision(player) || player.x<stormX || player.x>stormR || player.y<stormY || player.y>stormB){
+      player.die();
+      enableSpectator();
     }
   }
 
-  // BOTS
+  // bots
   for(let p of players){
     if(p.isBot && p.alive){
       p.x += Math.cos(p.dir)*p.speed*dt/1000;
       p.y += Math.sin(p.dir)*p.speed*dt/1000;
-      p.recordTrailPoint(p.x,p.y);
+      p.recordTrail();
 
       p.turnCooldown -= dt/1000;
       if(p.turnCooldown<=0){
@@ -134,103 +138,75 @@ function simulate(dt){
         }
       }
 
-      if(checkTrailCollisionFor(p) || p.x<stormX || p.x>stormRight || p.y<stormY || p.y>stormBottom) p.die();
+      if(checkCollision(p) || p.x<stormX || p.x>stormR || p.y<stormY || p.y>stormB) p.die();
     }
   }
 }
 
-function drawGrid(cx,cy,scale){
+function drawGrid(cx,cy){
   const gridSize=50;
-  const startX=-cx/scale%gridSize-gridSize;
-  const startY=-cy/scale%gridSize-gridSize;
-  const endX=canvas.width/scale+gridSize;
-  const endY=canvas.height/scale+gridSize;
+  const scale=1; // no shrinking
+  const startX=-cx%gridSize-gridSize;
+  const startY=-cy%gridSize-gridSize;
+  const endX=canvas.width+gridSize;
+  const endY=canvas.height+gridSize;
   ctx.strokeStyle="#0ff";
   ctx.lineWidth=1;
-  for(let x=startX;x<endX;x+=gridSize){
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,endY); ctx.stroke();
-  }
-  for(let y=startY;y<endY;y+=gridSize){
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(endX,y); ctx.stroke();
-  }
+  for(let x=startX;x<endX;x+=gridSize){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,endY); ctx.stroke(); }
+  for(let y=startY;y<endY;y+=gridSize){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(endX,y); ctx.stroke(); }
 }
 
 function draw(){
-  ctx.fillStyle="black"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  let cx,cy;
-  if(!spectator){ cx=player.x; cy=player.y; }
-  else {
-    let alive = players.filter(p=>p.alive);
-    if(alive.length>0){ cx=alive[0].x; cy=alive[0].y; }
-    else { cx=MAP_SIZE/2; cy=MAP_SIZE/2; }
-  }
-
-  let scale=0.3;
-  ctx.save();
-  ctx.translate(canvas.width/2,canvas.height/2);
-  ctx.scale(scale,scale);
-  ctx.translate(-cx,-cy);
+  // camera centered on player
+  let cx=player.alive ? player.x : MAP_SIZE/2;
+  let cy=player.alive ? player.y : MAP_SIZE/2;
+  const offsetX=canvas.width/2-cx;
+  const offsetY=canvas.height/2-cy;
 
   // background red outside storm
   ctx.fillStyle="red";
-  ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
   // storm inner black
   const stormX=(MAP_SIZE-stormSize)/2;
   const stormY=(MAP_SIZE-stormSize)/2;
+  const stormR=stormX+stormSize;
+  const stormB=stormY+stormSize;
   ctx.fillStyle="black";
-  ctx.fillRect(stormX,stormY,stormSize,stormSize);
+  ctx.fillRect(offsetX+stormX, offsetY+stormY, stormSize, stormSize);
 
-  drawGrid(cx,cy,scale);
+  drawGrid(cx,cy);
+
+  // trails & players
+  for(let p of players){
+    ctx.strokeStyle=p.color; ctx.beginPath();
+    for(let i=0;i<p.trail.length;i++){
+      let pt=p.trail[i];
+      if(i===0) ctx.moveTo(pt.x+offsetX,pt.y+offsetY);
+      else ctx.lineTo(pt.x+offsetX,pt.y+offsetY);
+    }
+    ctx.stroke();
+    if(p.alive) ctx.fillRect(p.x-PLAYER_SIZE/2+offsetX,p.y-PLAYER_SIZE/2+offsetY,PLAYER_SIZE,PLAYER_SIZE);
+  }
 
   // storm border
   ctx.strokeStyle="purple";
   ctx.lineWidth=30;
-  ctx.strokeRect(stormX,stormY,stormSize,stormSize);
-
-  // trails & players
-  for(let p of players){
-    ctx.strokeStyle=p.color;
-    ctx.beginPath();
-    for(let i=0;i<p.trail.length;i++){
-      let pt=p.trail[i];
-      if(i===0) ctx.moveTo(pt.x,pt.y); else ctx.lineTo(pt.x,pt.y);
-    }
-    ctx.stroke();
-    if(p.alive){ ctx.fillStyle=p.color; ctx.fillRect(p.x-PLAYER_SIZE/2,p.y-PLAYER_SIZE/2,PLAYER_SIZE,PLAYER_SIZE); }
-  }
-
-  ctx.restore();
+  ctx.strokeRect(offsetX+stormX, offsetY+stormY, stormSize, stormSize);
 
   // HUD
-  ctx.fillStyle="white"; ctx.font="16px Arial"; ctx.textAlign="right";
+  ctx.fillStyle="white";
+  ctx.font="16px Arial";
+  ctx.textAlign="right";
   ctx.fillText("Players Alive: "+players.filter(p=>p.alive).length, canvas.width-20,30);
   ctx.fillText("Storm: "+stormTimer.toFixed(1), canvas.width-20,50);
 
-  ctx.fillStyle="red"; ctx.font="bold 20px Arial"; ctx.textAlign="center";
+  ctx.fillStyle="red";
+  ctx.font="bold 20px Arial";
+  ctx.textAlign="center";
   ctx.fillText("DIGIBIKE ROYALE", canvas.width/2, canvas.height-20);
-
-  drawMiniMap();
-}
-
-function drawMiniMap(){
-  let scale = showLargeMap?0.4:0.15;
-  let size = canvas.width*scale;
-  ctx.save();
-  ctx.translate(canvas.width-size-10,10);
-  ctx.scale(size/MAP_SIZE,size/MAP_SIZE);
-
-  ctx.strokeStyle="white"; ctx.lineWidth=10;
-  ctx.strokeRect((MAP_SIZE-stormSize)/2,(MAP_SIZE-stormSize)/2,stormSize,stormSize);
-
-  for(let p of players){
-    if(p.alive){
-      ctx.fillStyle=p.color;
-      ctx.fillRect(p.x,p.y,20,20);
-    }
-  }
-  ctx.restore();
 }
 </script>
 </body>
