@@ -1,36 +1,27 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LightTrail.io — single-file demo</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DIGIgridChase</title>
 <style>
-  html,body { height:100%; margin:0; background:#0b0b0d; color:#eaeaea; font-family:Inter,system-ui,Arial; }
+  html,body { margin:0; padding:0; height:100%; background:#0b0b0d; color:#eaeaea; font-family:Inter,Arial,sans-serif; }
   #game { display:block; width:100vw; height:100vh; background: radial-gradient(ellipse at center, #071017 0%, #000 60%); cursor:none; }
-  .ui {
-    position: absolute; left:12px; top:12px; z-index:10;
-    background: rgba(0,0,0,0.25); padding:10px 12px; border-radius:8px;
-    backdrop-filter: blur(4px); color:#dfefff; font-size:13px;
-  }
-  .ui small { display:block; color:#9fb6d8; margin-top:6px; font-size:12px; }
-  #scoreboard { position: absolute; right:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; }
+  #ui { position:absolute; left:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px 12px; border-radius:8px; backdrop-filter:blur(4px); color:#dfefff; font-size:13px; }
+  #scoreboard { position:absolute; right:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; }
   #scoreboard h3 { margin:0 0 6px 0; font-size:14px; }
   #scoreboard ul { margin:0; padding:0 6px; list-style:none; font-size:13px; max-height:220px; overflow:auto; }
+  #spotifyBtn { position:absolute; top:12px; right:12px; z-index:20; background:#1db954; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:13px; }
   #hint { position:absolute; left:50%; bottom:20px; transform:translateX(-50%); color:#9fb6d8; font-size:13px; opacity:0.9; }
-  .btn { background:#1a73e8; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:13px; }
   #fps { position:absolute; left:12px; bottom:12px; background:rgba(0,0,0,0.25); padding:6px 8px; border-radius:6px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div class="ui" id="ui">
-  <strong>LightTrail.io (demo)</strong>
+<div id="ui">
+  <strong>DIGIgridChase</strong>
   <small>Move: mouse or WASD / arrows • Left click to boost • Respawn on death</small>
-  <div style="margin-top:8px;">
-    <button id="pauseBtn" class="btn">Pause</button>
-    <button id="spawnBotBtn" class="btn" style="margin-left:6px;background:#27ae60">Spawn Bot</button>
-  </div>
 </div>
 
 <div id="scoreboard">
@@ -38,36 +29,31 @@
   <ul id="scores"></ul>
 </div>
 
-<div id="hint">Tip: Try to outmaneuver bots — trails persist. No bounds. Map is big.</div>
+<button id="spotifyBtn">▶ Play</button>
+
+<div id="hint">Tip: Only one player? Local bots will appear to chase you!</div>
 <div id="fps">FPS: <span id="fpsNum">0</span></div>
 
+<!-- Embed Spotify iframe hidden (we control play via button) -->
+<iframe id="spotifyEmbed" src="https://open.spotify.com/embed/album/47pjW3XDPW99NShtkeewxl" width="0" height="0" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
+
 <script>
-/*
-  LightTrail.io - single-file browser demo
-  - Large world (MAP_SIZE)
-  - Player leaves trail segments (polylines)
-  - Bots spawn and die on hitting trails
-  - Client only (no server), good for GitHub Pages hosting
-*/
+/* ==== DIGIgridChase main script ==== */
 
-// ==== SETTINGS
-const MAP_SIZE = 10000;               // world size (square) - large so it feels unbounded
-const VIEWPORT_PAD = 0;               // not used much; camera centers on player
-const PLAYER_SPEED = 220;             // units per second
+// CONFIG
+const MAP_SIZE = 10000;
+const PLAYER_SPEED = 220;
 const PLAYER_RADIUS = 8;
-const TRAIL_MIN_DIST = 4;             // minimal distance between recorded trail points
-const TRAIL_POINT_LIFETIME = 1000 * 60 * 60 * 24; // effectively infinite (1 day)
-const BOT_COUNT_INITIAL = 6;
-const BOT_SPAWN_INTERVAL = 3000;      // ms
-const BOT_MAX = 40;
-const BOT_SPEED = 160;
-const BOT_TURN_FREQ = 800;            // ms average between direction changes
-const TICK_RATE = 60;                 // server-ish tick (simulation steps per second)
-const COLLISION_DISTANCE = 8;         // distance to trail that counts as collision
+const TRAIL_MIN_DIST = 4;
 const TRAIL_WIDTH = 6;
-const MAX_TRAIL_SEGMENTS = 100000;    // cap for memory safety
+const BOT_COUNT_INITIAL = 3;
+const BOT_SPEED = 160;
+const BOT_SPAWN_INTERVAL = 3000;
+const TICK_RATE = 60;
+const COLLISION_DISTANCE = 8;
+const MAX_TRAIL_SEGMENTS = 100000;
 
-// ==== GLOBALS
+// GLOBALS
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = canvas.width = innerWidth;
@@ -80,86 +66,47 @@ window.addEventListener('resize', () => { W = canvas.width = innerWidth; H = can
 // UI
 const fpsNum = document.getElementById('fpsNum');
 const scoresEl = document.getElementById('scores');
-document.getElementById('pauseBtn').onclick = () => { paused = !paused; document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause'; };
-document.getElementById('spawnBotBtn').onclick = () => spawnBot();
+const spotifyBtn = document.getElementById('spotifyBtn');
+const spotifyEmbed = document.getElementById('spotifyEmbed');
+let spotifyPlaying = false;
+spotifyBtn.onclick = () => {
+  spotifyPlaying = !spotifyPlaying;
+  if(spotifyPlaying){
+    spotifyBtn.textContent = '⏸ Pause';
+    spotifyEmbed.contentWindow.postMessage({ method: 'play' }, '*');
+  } else {
+    spotifyBtn.textContent = '▶ Play';
+    spotifyEmbed.contentWindow.postMessage({ method: 'pause' }, '*');
+  }
+};
 
-// Input
+// INPUT
 let mouseX = W/2, mouseY = H/2, mouseDown=false;
 addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
-addEventListener('mousedown', (e)=>{ mouseDown=true; });
-addEventListener('mouseup', (e)=>{ mouseDown=false; });
+addEventListener('mousedown', ()=>{ mouseDown=true; });
+addEventListener('mouseup', ()=>{ mouseDown=false; });
 const keys = {};
-addEventListener('keydown', (e)=>keys[e.key.toLowerCase()] = true);
-addEventListener('keyup', (e)=>keys[e.key.toLowerCase()] = false);
+addEventListener('keydown', (e)=>keys[e.key.toLowerCase()]=true);
+addEventListener('keyup', (e)=>keys[e.key.toLowerCase()]=false);
 
-// Utility functions
-function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
-function len(x,y){ return Math.hypot(x,y); }
+// UTILS
 function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
 function rand(min,max){ return Math.random()*(max-min)+min; }
 function now(){ return performance.now(); }
 
-// Point-to-segment distance
-function pointSegmentDistance(px,py, x1,y1,x2,y2){
-  const l2 = (x2-x1)*(x2-x1)+(y2-y1)*(y2-y1);
-  if(l2 === 0) return dist(px,py,x1,y1);
-  let t = ((px-x1)*(x2-x1)+(py-y1)*(y2-y1))/l2;
-  t = Math.max(0, Math.min(1, t));
-  const projx = x1 + t*(x2-x1);
-  const projy = y1 + t*(y2-y1);
-  return dist(px,py,projx,projy);
-}
+// TRAILS
+const trails = [];
+class TrailSegment { constructor(x1,y1,x2,y2,color){ this.x1=x1; this.y1=y1; this.x2=x2; this.y2=y2; this.color=color; } }
 
-// Spatial hashing for trail collision checks
-class SpatialHash {
-  constructor(cellSize=100){
-    this.cellSize = cellSize;
-    this.map = new Map();
-  }
-  _key(x,y){ const xi = Math.floor(x/this.cellSize); const yi = Math.floor(y/this.cellSize); return xi+','+yi; }
-  insertSegment(x1,y1,x2,y2, data){
-    const minx = Math.min(x1,x2), maxx = Math.max(x1,x2), miny = Math.min(y1,y2), maxy = Math.max(y1,y2);
-    const x0 = Math.floor(minx/this.cellSize), x1i = Math.floor(maxx/this.cellSize);
-    const y0 = Math.floor(miny/this.cellSize), y1i = Math.floor(maxy/this.cellSize);
-    for(let xi=x0; xi<=x1i; xi++){
-      for(let yi=y0; yi<=y1i; yi++){
-        const key = xi+','+yi;
-        if(!this.map.has(key)) this.map.set(key, []);
-        this.map.get(key).push(data);
-      }
-    }
-  }
-  queryRadius(x,y,r){
-    const minx = Math.floor((x-r)/this.cellSize), maxx = Math.floor((x+r)/this.cellSize);
-    const miny = Math.floor((y-r)/this.cellSize), maxy = Math.floor((y+r)/this.cellSize);
-    const out = new Set();
-    for(let xi=minx; xi<=maxx; xi++){
-      for(let yi=miny; yi<=maxy; yi++){
-        const key = xi+','+yi;
-        const arr = this.map.get(key);
-        if(arr) for(const it of arr) out.add(it);
-      }
-    }
-    return Array.from(out);
-  }
-  clear(){ this.map.clear(); }
-}
-
-// Trail store: global trails array of segments {x1,y1,x2,y2,ownerId}
-const trails = []; // segments
-const trailHash = new SpatialHash(120);
-
-// Entities: player + bots
+// ENTITIES
 let entities = {};
 let entityIdCounter = 1;
-
 class Entity {
   constructor(opts){
     this.id = (entityIdCounter++).toString();
     this.name = opts.name || 'bot';
     this.x = opts.x || rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
     this.y = opts.y || rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
-    this.vx = 0; this.vy = 0;
     this.dir = opts.dir || rand(0, Math.PI*2);
     this.speed = opts.speed || BOT_SPEED;
     this.radius = opts.radius || PLAYER_RADIUS;
@@ -167,325 +114,135 @@ class Entity {
     this.alive = true;
     this.lastTrailX = this.x;
     this.lastTrailY = this.y;
-    this.trailPoints = []; // for drawing smooth trails optionally
-    this.score = 0;
     this.isPlayer = !!opts.isPlayer;
     this.boost = false;
-    this.spawn();
+    this.score = 0;
   }
   randomColor(){
-    // nice neon-ish palette
     const palette = ['#66ffea','#9ad1ff','#ffd86b','#ff9db4','#c09bff','#8bff8b'];
     return palette[Math.floor(Math.random()*palette.length)];
   }
-  spawn(){
-    this.alive = true;
-    this.trailPoints.length = 0;
-    // start with tiny trail point
-    this.lastTrailX = this.x;
-    this.lastTrailY = this.y;
-    this.recordTrailPoint(this.x, this.y);
-    this.score = 0;
-  }
-  recordTrailPoint(nx,ny){
-    // if far enough, add a segment from lastTrail to new
-    const d = dist(this.lastTrailX, this.lastTrailY, nx, ny);
-    if(d >= TRAIL_MIN_DIST){
-      const seg = {x1:this.lastTrailX, y1:this.lastTrailY, x2:nx, y2:ny, owner:this.id, w:TRAIL_WIDTH, color:this.color};
-      trails.push(seg);
-      trailHash.insertSegment(seg.x1,seg.y1,seg.x2,seg.y2, seg);
+  recordTrail(nx,ny){
+    const d = dist(this.lastTrailX,this.lastTrailY,nx,ny);
+    if(d>=TRAIL_MIN_DIST){
+      trails.push(new TrailSegment(this.lastTrailX,this.lastTrailY,nx,ny,this.color));
       this.lastTrailX = nx; this.lastTrailY = ny;
-      // keep memory under cap
-      if(trails.length > MAX_TRAIL_SEGMENTS) {
-        // drop earliest segments
-        const drop = trails.splice(0, Math.floor(trails.length - MAX_TRAIL_SEGMENTS));
-        // rebuild spatial hash (simple approach)
-        rebuildTrailHash();
-      }
+      if(trails.length>MAX_TRAIL_SEGMENTS) trails.splice(0,trails.length-MAX_TRAIL_SEGMENTS);
     }
   }
-  die(reason){
-    this.alive = false;
-    // create small explosion of trail points? for effect - increase score to others maybe
-    this.score = Math.max(0, this.score - 5);
-    // respawn after short delay
-    setTimeout(()=>{
-      this.x = rand(MAP_SIZE*0.05, MAP_SIZE*0.95);
-      this.y = rand(MAP_SIZE*0.05, MAP_SIZE*0.95);
-      this.dir = rand(0,Math.PI*2);
-      this.spawn();
-    }, 900);
-  }
+  die(){ this.alive=false; setTimeout(()=>{ this.spawn(); },900); }
+  spawn(){ this.alive=true; this.lastTrailX=this.x; this.lastTrailY=this.y; this.score=0; }
 }
 
-// rebuild spatial hash (simple full rebuild)
-function rebuildTrailHash(){
-  trailHash.clear();
-  for(const seg of trails) trailHash.insertSegment(seg.x1,seg.y1,seg.x2,seg.y2,seg);
-}
-
-// Create player entity
-const player = new Entity({name:'you', isPlayer:true, x:MAP_SIZE/2, y:MAP_SIZE/2, color:'#66ffea', speed:PLAYER_SPEED});
-player.name = 'You';
+// PLAYER
+const player = new Entity({name:'You', isPlayer:true, x:MAP_SIZE/2, y:MAP_SIZE/2, color:'#66ffea', speed:PLAYER_SPEED});
 entities[player.id] = player;
 
-// Bot management
+// BOTS
 function spawnBot(){
-  if(Object.values(entities).filter(e=>!e.isPlayer).length >= BOT_MAX) return;
-  const b = new Entity({name:'bot'+Math.floor(rand(1000,9999)), x:rand(0,MAP_SIZE), y:rand(0,MAP_SIZE), speed:BOT_SPEED});
-  b.dir = rand(0,Math.PI*2);
+  const b = new Entity({name:'bot'+Math.floor(rand(1000,9999)), speed:BOT_SPEED});
   entities[b.id] = b;
   return b;
 }
 for(let i=0;i<BOT_COUNT_INITIAL;i++) spawnBot();
-setInterval(()=>{ if(!paused) spawnBot(); }, BOT_SPAWN_INTERVAL);
+setInterval(()=>{
+  if(Object.values(entities).filter(e=>!e.isPlayer).length<5) spawnBot();
+}, BOT_SPAWN_INTERVAL);
 
-// Bot steering helper: random jitter & seek empty space
-function botSteer(bot, dt){
-  // occasionally change direction randomly
-  if(Math.random() < (dt/1000) * 0.8) bot.dir += rand(-0.7,0.7);
-
-  // edge avoidance: keep away from very close walls (map edges)
-  const margin = 150;
-  if(bot.x < margin) bot.dir = rand(-0.5,0.5) + 0;
-  else if(bot.x > MAP_SIZE - margin) bot.dir = rand(-0.5,0.5) + Math.PI;
-  if(bot.y < margin) bot.dir = rand(-0.5,0.5) + Math.PI/2;
-  else if(bot.y > MAP_SIZE - margin) bot.dir = rand(-0.5,0.5) + Math.PI*1.5;
-}
-
-// Collision detection: checks if entity at (x,y) is within COLLISION_DISTANCE of any trail segment
-function checkTrailCollisionFor(entity){
-  // query spatial hash near the entity
-  const near = trailHash.queryRadius(entity.x, entity.y, COLLISION_DISTANCE + 8);
-  for(const seg of near){
-    // ignore very recent segments created by same entity that are adjacent (avoid immediate self-collision)
-    if(seg.owner === entity.id) continue;
-    const d = pointSegmentDistance(entity.x, entity.y, seg.x1, seg.y1, seg.x2, seg.y2);
-    if(d <= COLLISION_DISTANCE) return seg;
-  }
-  return null;
-}
-
-// Simulation update
+// SIMULATION
 function simulate(dt){
-  // player control
+  // PLAYER
   if(player.alive){
-    // compute desired direction via mouse (camera to world conversion)
-    const cam = getCamera();
-    // screen coords -> world coords
-    const worldMouseX = cam.x + (mouseX - W/2);
-    const worldMouseY = cam.y + (mouseY - H/2);
-
-    // keyboard fallback: combine inputs
-    let inputVX = 0, inputVY = 0;
-    if(keys['arrowup']||keys['w']) inputVY -= 1;
-    if(keys['arrowdown']||keys['s']) inputVY += 1;
-    if(keys['arrowleft']||keys['a']) inputVX -= 1;
-    if(keys['arrowright']||keys['d']) inputVX += 1;
-
-    let dx = worldMouseX - player.x, dy = worldMouseY - player.y;
-    let angToMouse = Math.atan2(dy,dx);
-    // if keyboard input present, use that instead
-    if(Math.abs(inputVX) + Math.abs(inputVY) > 0){
-      angToMouse = Math.atan2(inputVY, inputVX);
-    }
-    // smooth turn toward target direction
-    const diff = ((angToMouse - player.dir + Math.PI) % (2*Math.PI)) - Math.PI;
-    player.dir += diff * clamp(0.12 * (dt/16.67), 0, 1); // turn rate scaled by dt
-
-    // speed + boost
-    const baseSpeed = player.speed;
-    player.boost = mouseDown;
-    const effectiveSpeed = baseSpeed * (player.boost ? 1.6 : 1.0);
-    player.vx = Math.cos(player.dir) * effectiveSpeed;
-    player.vy = Math.sin(player.dir) * effectiveSpeed;
-
-    // integrate
-    player.x += player.vx * (dt/1000);
-    player.y += player.vy * (dt/1000);
-
-    // wrap-around across map edges to emulate "no bounds"
-    if(player.x < 0) player.x += MAP_SIZE;
-    if(player.x >= MAP_SIZE) player.x -= MAP_SIZE;
-    if(player.y < 0) player.y += MAP_SIZE;
-    if(player.y >= MAP_SIZE) player.y -= MAP_SIZE;
-
-    // record trail
-    player.recordTrailPoint(player.x, player.y);
-
-    // collision check
-    const hitSeg = checkTrailCollisionFor(player);
-    if(hitSeg){
-      player.die();
-    }
+    const worldMouseX = player.x + (mouseX - W/2);
+    const worldMouseY = player.y + (mouseY - H/2);
+    let dx = worldMouseX-player.x, dy = worldMouseY-player.y;
+    let ang = Math.atan2(dy,dx);
+    const inputVX = (keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0);
+    const inputVY = (keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0);
+    if(inputVX||inputVY) ang = Math.atan2(inputVY,inputVX);
+    const diff = ((ang - player.dir + Math.PI) % (2*Math.PI)) - Math.PI;
+    player.dir += diff * clamp(0.12*(dt/16.67),0,1);
+    const effectiveSpeed = player.speed*(mouseDown?1.6:1.0);
+    player.x += Math.cos(player.dir)*effectiveSpeed*dt/1000;
+    player.y += Math.sin(player.dir)*effectiveSpeed*dt/1000;
+    player.recordTrail(player.x,player.y);
   }
 
-  // bots
-  for(const id in entities){
-    const e = entities[id];
-    if(e === player) continue;
-    if(!e.alive) continue;
-    // steer
-    botSteer(e, dt);
-    // move
-    e.vx = Math.cos(e.dir) * e.speed;
-    e.vy = Math.sin(e.dir) * e.speed;
-    e.x += e.vx * (dt/1000);
-    e.y += e.vy * (dt/1000);
-    // wrap-around
-    if(e.x < 0) e.x += MAP_SIZE;
-    if(e.x >= MAP_SIZE) e.x -= MAP_SIZE;
-    if(e.y < 0) e.y += MAP_SIZE;
-    if(e.y >= MAP_SIZE) e.y -= MAP_SIZE;
-    // record trail
-    e.recordTrailPoint(e.x, e.y);
-    // collision check
-    const hit = checkTrailCollisionFor(e);
-    if(hit){
-      e.die();
-    }
-  }
+  // BOTS
+  Object.values(entities).filter(e=>!e.isPlayer).forEach(bot=>{
+    if(!bot.alive) return;
+    const target = player;
+    const dx = target.x - bot.x;
+    const dy = target.y - bot.y;
+    const ang = Math.atan2(dy,dx);
+    const diff = ((ang - bot.dir + Math.PI) % (2*Math.PI)) - Math.PI;
+    bot.dir += diff*0.03*(dt/16.67);
+    bot.x += Math.cos(bot.dir)*bot.speed*dt/1000;
+    bot.y += Math.sin(bot.dir)*bot.speed*dt/1000;
+    bot.recordTrail(bot.x,bot.y);
+  });
+
+  // Collision with trails
+  Object.values(entities).forEach(ent=>{
+    if(!ent.alive) return;
+    trails.forEach(t=>{
+      if(dist(ent.x,ent.y,t.x1,t.y1)<COLLISION_DISTANCE || dist(ent.x,ent.y,t.x2,t.y2)<COLLISION_DISTANCE){
+        ent.die();
+      }
+    });
+  });
+
+  // Update scores (longest trail)
+  Object.values(entities).forEach(e=>{ e.score = trails.filter(t=>t.color===e.color).length; });
 }
 
-// Camera centered on player (world coords). returns {x,y} world coords of camera center
-function getCamera(){
-  return { x: player.x, y: player.y };
-}
-
-// Drawing
+// DRAW
 function draw(){
-  ctx.save();
-  // clear
   ctx.clearRect(0,0,W,H);
+  ctx.save();
+  // Camera centered on player
+  ctx.translate(W/2 - player.x, H/2 - player.y);
 
-  // translate to camera
-  const cam = getCamera();
-  // world to screen: screenX = (worldX - cam.x) + W/2
-  // draw background grid for context (subtle)
-  const gridSize = 200;
-  const startX = Math.floor((cam.x - W/2)/gridSize) * gridSize;
-  const endX = Math.floor((cam.x + W/2)/gridSize) * gridSize;
-  const startY = Math.floor((cam.y - H/2)/gridSize) * gridSize;
-  const endY = Math.floor((cam.y + H/2)/gridSize) * gridSize;
-  ctx.fillStyle = '#020509';
-  ctx.fillRect(0,0,W,H);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.02)';
-  ctx.lineWidth = 1;
-  for(let gx=startX; gx<=endX; gx+=gridSize){
-    const sx = Math.round((gx - cam.x) + W/2);
-    ctx.beginPath(); ctx.moveTo(sx,0); ctx.lineTo(sx,H); ctx.stroke();
-  }
-  for(let gy=startY; gy<=endY; gy+=gridSize){
-    const sy = Math.round((gy - cam.y) + H/2);
-    ctx.beginPath(); ctx.moveTo(0,sy); ctx.lineTo(W,sy); ctx.stroke();
-  }
-
-  // draw trails (only those near camera)
-  const visibleSegs = trailHash.queryRadius(cam.x, cam.y, Math.max(W,H)/2 + 200);
-  // sort by maybe insertion order for nicer overlap
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for(const seg of visibleSegs){
+  // Trails
+  trails.forEach(t=>{
+    ctx.strokeStyle = t.color;
+    ctx.lineWidth = TRAIL_WIDTH;
     ctx.beginPath();
-    const sx1 = (seg.x1 - cam.x) + W/2;
-    const sy1 = (seg.y1 - cam.y) + H/2;
-    const sx2 = (seg.x2 - cam.x) + W/2;
-    const sy2 = (seg.y2 - cam.y) + H/2;
-    ctx.strokeStyle = seg.color;
-    ctx.lineWidth = seg.w;
-    ctx.moveTo(sx1,sy1);
-    ctx.lineTo(sx2,sy2);
+    ctx.moveTo(t.x1,t.y1);
+    ctx.lineTo(t.x2,t.y2);
     ctx.stroke();
-    // glow
-    ctx.strokeStyle = seg.color + '44';
-    ctx.lineWidth = seg.w + 6;
-    ctx.stroke();
-  }
+  });
 
-  // draw entities
-  for(const id in entities){
-    const e = entities[id];
-    // only draw those within camera view
-    const sx = (e.x - cam.x) + W/2;
-    const sy = (e.y - cam.y) + H/2;
-    if(sx < -100 || sx > W+100 || sy < -100 || sy > H+100) continue;
-    // body
-    ctx.beginPath();
+  // Entities
+  Object.values(entities).forEach(e=>{
+    if(!e.alive) return;
     ctx.fillStyle = e.color;
-    ctx.arc(sx, sy, e.radius + (e.boost ? 2 : 0), 0, Math.PI*2);
-    ctx.fill();
-    // heading marker
     ctx.beginPath();
-    ctx.fillStyle = '#00000033';
-    ctx.arc(sx + Math.cos(e.dir)*(e.radius+3), sy + Math.sin(e.dir)*(e.radius+3), 3, 0, Math.PI*2);
+    ctx.arc(e.x,e.y,e.radius,0,2*Math.PI);
     ctx.fill();
-    // name
-    ctx.font = '12px Inter,Arial';
-    ctx.fillStyle = '#e9f1ff';
-    ctx.fillText(e.name, sx + 12, sy - 10);
-  }
-
-  // crosshair
-  ctx.beginPath();
-  ctx.strokeStyle = '#ffffff22';
-  ctx.lineWidth = 1;
-  ctx.arc(W/2, H/2, 10, 0, Math.PI*2);
-  ctx.stroke();
+  });
 
   ctx.restore();
 }
 
-// Scoreboard
-function updateScores(){
-  const arr = Object.values(entities).slice().sort((a,b)=>b.score - a.score).slice(0,8);
-  scoresEl.innerHTML = '';
-  for(const e of arr){
-    const li = document.createElement('li');
-    li.textContent = `${e.name} ${e.isPlayer ? '(you)' : ''} — ${Math.round(e.score)}`;
-    scoresEl.appendChild(li);
-  }
-}
-
-// FPS tracking
-let fpsHistory = [];
-function trackFPS(dt){
-  const fps = 1000/dt;
-  fpsHistory.push(fps);
-  if(fpsHistory.length > 30) fpsHistory.shift();
-  const avg = fpsHistory.reduce((a,b)=>a+b,0)/fpsHistory.length;
-  fpsNum.textContent = Math.round(avg);
-}
-
-// Main loop
-let accumulator = 0;
-function mainLoop(ts){
-  const dt = ts - lastTs;
-  lastTs = ts;
+// GAME LOOP
+let frames = 0, fps=0, lastFpsTs=now();
+function loop(ts){
+  const dt = ts-lastTs;
+  lastTs=ts;
   if(!paused){
-    accumulator += dt;
-    const step = 1000 / TICK_RATE;
-    while(accumulator >= step){
-      simulate(step);
-      accumulator -= step;
-    }
+    simulate(dt);
     draw();
-    updateScores();
-    trackFPS(dt);
-  } else {
-    // draw paused overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 36px Inter,Arial';
-    ctx.fillText('PAUSED', W/2 - 60, H/2);
   }
-  requestAnimationFrame(mainLoop);
+  // FPS
+  frames++;
+  if(ts-lastFpsTs>1000){ fps=frames; frames=0; lastFpsTs=ts; fpsNum.textContent=fps; }
+  requestAnimationFrame(loop);
 }
-requestAnimationFrame(mainLoop);
+requestAnimationFrame(loop);
 
-// initial population of trail spatial hash
-rebuildTrailHash();
-
+// UTIL
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
 </script>
 </body>
 </html>
