@@ -1,37 +1,73 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tron Light Bike — Bots</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Tron Light Bike — 3rd Person</title>
+
+  <!-- Orbitron -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="ui">
-    <div id="overlay">
-      <h1>Tron: Light-Bike</h1>
-      <label>
-        Your name
-        <input id="playerName" type="text" placeholder="Player" maxlength="20" />
-      </label>
-      <label>
-        Bots
-        <input id="botCount" type="range" min="1" max="8" value="3" />
-        <span id="botCountLabel">3</span>
-      </label>
-      <button id="startBtn">Start Game</button>
-      <small>Controls: Arrow keys or WASD</small>
+  <main id="stage">
+    <div id="frame">
+      <canvas id="gameCanvas" width="800" height="600" aria-label="Tron Light Bike game"></canvas>
+
+      <!-- top UI -->
+      <div id="uiTop">
+        <div id="levelBox">Level <span id="levelNum">1</span></div>
+        <div id="statusBox">Alive: <span id="aliveCount">—</span></div>
+      </div>
+
+      <!-- right top small neon score/level -->
+      <div id="uiRight">
+        <div id="digitalLevel">LVL <span id="digitalLevelNum">1</span></div>
+      </div>
+
+      <!-- overlay start -->
+      <div id="overlay">
+        <h1>Tron: Light-Bike</h1>
+        <label>
+          Your name
+          <input id="playerName" type="text" placeholder="Player" maxlength="18"/>
+        </label>
+        <label>
+          Start level
+          <input id="startLevel" type="number" min="1" max="50" value="1"/>
+        </label>
+        <label>
+          Starting bots
+          <input id="startBots" type="range" min="1" max="12" value="3"/>
+          <span id="startBotsLabel">3</span>
+        </label>
+
+        <div class="controls-row">
+          <button id="startBtn">Start Game</button>
+          <button id="demoBtn">Play Demo</button>
+        </div>
+
+        <small class="hint">Controls: Arrow keys or WASD. Mobile shows on-screen buttons.</small>
+      </div>
+
+      <!-- in-game message / countdown -->
+      <div id="message" class="hidden"></div>
+
+      <!-- mobile controls (only visible on touch devices) -->
+      <div id="mobileControls" class="hidden">
+        <button id="mLeft" class="m-btn">◀</button>
+        <button id="mUp" class="m-btn">▲</button>
+        <button id="mRight" class="m-btn">▶</button>
+      </div>
+
+      <!-- bottom bar -->
+      <div id="bottomBar">
+        <button id="restartBtn">Restart</button>
+        <div id="playerIndicator">You: <span id="playerNameLabel">Player</span></div>
+      </div>
     </div>
-
-    <div id="topbar" class="hidden">
-      <div id="status">Alive: —</div>
-      <button id="restartBtn">Restart</button>
-    </div>
-
-    <div id="message" class="hidden"></div>
-  </div>
-
-  <canvas id="gameCanvas"></canvas>
+  </main>
 
   <script src="script.js" defer></script>
 </body>
