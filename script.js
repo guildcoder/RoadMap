@@ -1,7 +1,7 @@
 (() => {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
+const overlay = document.getElementById('overlay'); // no overlay used now
 const playBtn = document.getElementById('playBtn');
 const messageBox = document.getElementById('message');
 const levelDisplay = document.getElementById('levelDisplay');
@@ -11,18 +11,52 @@ const HEIGHT = canvas.height;
 const CELL = 10;
 const FPS = 25;
 
+// Large logical game grid
+const GRID_W = 200;
+const GRID_H = 200;
+
 let player, bots = [], occupancy = new Set();
 let running = false;
 let tickTimer = null;
 let currentLevel = 1;
+let particles = [];
 
 // Colors
 const PLAYER_COLOR = '#0ff';
 const BOT_COLOR = '#f00';
 
+// Sounds placeholders (add .wav files to assets/sounds/)
+const soundCountdown = new Audio('assets/sounds/countdown.wav');
+const soundCrash = new Audio('assets/sounds/crash.wav');
+const soundWin = new Audio('assets/sounds/win.wav');
+
 // Utility
 function key(gx,gy){ return gx+'|'+gy; }
 function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+// Particle class
+class Particle {
+  constructor(x,y,color){
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random()-0.5)*6;
+    this.vy = (Math.random()-0.5)*6;
+    this.alpha = 1;
+    this.color = color;
+  }
+  step(){
+    this.x += this.vx;
+    this.y += this.vy;
+    this.alpha -= 0.05;
+  }
+  draw(){
+    if(this.alpha<=0) return;
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.alpha;
+    ctx.fillRect(this.x,this.y,4,4);
+    ctx.globalAlpha = 1;
+  }
+}
 
 // Bike class
 class Bike {
@@ -39,21 +73,35 @@ class Bike {
 
   step(){
     if(!this.alive) return;
+
+    // Move based on direction
     if(this.dir==='UP') this.gy--;
     else if(this.dir==='DOWN') this.gy++;
     else if(this.dir==='LEFT') this.gx--;
-    else this.gx++;
-    
-    // collision
-    if(this.gx<0||this.gy<0||this.gx>=WIDTH/CELL||this.gy>=HEIGHT/CELL||occupancy.has(key(this.gx,this.gy))){
-      this.alive=false; return;
+    else this.dir==='RIGHT' && (this.gx++);
+
+    // Wrap around the large board
+    if(this.gx<0) this.gx=GRID_W-1;
+    if(this.gx>=GRID_W) this.gx=0;
+    if(this.gy<0) this.gy=GRID_H-1;
+    if(this.gy>=GRID_H) this.gy=0;
+
+    // Collision detection
+    if(occupancy.has(key(this.gx,this.gy))){
+      this.alive=false;
+      // spawn particles
+      const cx = this.gx*CELL;
+      const cy = this.gy*CELL;
+      for(let i=0;i<50;i++) particles.push(new Particle(cx,cy,this.color));
+      if(!this.isBot) soundCrash.play();
+      return;
     }
+
     occupancy.add(key(this.gx,this.gy));
     this.trail.push({gx:this.gx,gy:this.gy});
   }
 
   draw(camX,camY,isPlayer){
-    // Draw trail
     ctx.fillStyle = this.color;
     this.trail.forEach(p=>{
       const x = (p.gx*CELL) - camX;
@@ -61,12 +109,11 @@ class Bike {
       ctx.fillRect(x,y,CELL,CELL);
     });
 
-    // Draw head
     const hx = this.gx*CELL - camX;
     const hy = this.gy*CELL - camY;
     ctx.fillRect(hx,hy,CELL,CELL);
+
     if(isPlayer){
-      // halo
       ctx.save();
       ctx.globalAlpha=0.2;
       ctx.fillStyle=this.color;
@@ -80,22 +127,20 @@ class Bike {
   chooseBotDir(){
     if(!this.alive) return;
     const dirs = ['UP','DOWN','LEFT','RIGHT'];
-    // simple random turn
     if(Math.random()<0.2){
       this.dir = dirs[Math.floor(Math.random()*dirs.length)];
     }
   }
 }
 
-// Camera
+// Camera follows player
 function computeCamera(){
-  // camera slightly behind player
   let camX = player.gx*CELL - WIDTH/2 + CELL/2;
   let camY = player.gy*CELL - HEIGHT*0.6;
   return {camX,camY};
 }
 
-// Background grid
+// Draw background grid
 function drawBackground(camX,camY){
   ctx.fillStyle='#000';
   ctx.fillRect(0,0,WIDTH,HEIGHT);
@@ -115,18 +160,24 @@ function drawBackground(camX,camY){
   ctx.stroke();
 }
 
+// Draw particles
+function drawParticles(){
+  particles.forEach(p=>p.step());
+  particles.forEach(p=>p.draw());
+  particles = particles.filter(p=>p.alpha>0);
+}
+
 // Game tick
 function gameTick(){
-  // bots
   bots.forEach(b=>b.chooseBotDir());
-  // move all
   player.step();
   bots.forEach(b=>b.step());
-  
+
   const {camX,camY} = computeCamera();
   drawBackground(camX,camY);
   player.draw(camX,camY,true);
   bots.forEach(b=>b.draw(camX,camY,false));
+  drawParticles();
 
   // check win/lose
   if(!player.alive){
@@ -135,6 +186,7 @@ function gameTick(){
     setTimeout(()=>{ startLevel(1); },2200);
   } else if(bots.every(b=>!b.alive)){
     running=false; stopLoop();
+    soundWin.play();
     showMessage('Win!',1500);
     setTimeout(()=>{ startLevel(currentLevel+1); },1600);
   }
@@ -150,27 +202,27 @@ function stopLoop(){ if(tickTimer){ clearInterval(tickTimer); tickTimer=null; } 
 function startLevel(level){
   occupancy = new Set();
   currentLevel=level;
-  // spawn player center
-  player=new Bike(Math.floor((WIDTH/CELL)/2),Math.floor((HEIGHT/CELL)/2),PLAYER_COLOR,false);
-  // spawn bots
+  player=new Bike(Math.floor(GRID_W/2),Math.floor(GRID_H/2),PLAYER_COLOR,false);
   bots=[];
   for(let i=0;i<level;i++){
-    let bx=randInt(2,(WIDTH/CELL)-3);
-    let by=randInt(2,(HEIGHT/CELL)-3);
+    let bx=randInt(2,GRID_W-3);
+    let by=randInt(2,GRID_H-3);
     bots.push(new Bike(bx,by,BOT_COLOR,true));
   }
-  overlay.style.display='none';
   messageBox.textContent='';
-  // countdown
   showCountdown(3);
 }
 
+// Countdown function
 function showCountdown(n){
   if(n===0){ showMessage('GO!',800); startLoop(); return; }
   showMessage(n,800);
+  soundCountdown.currentTime=0;
+  soundCountdown.play();
   setTimeout(()=>showCountdown(n-1),800);
 }
 
+// Show messages
 function showMessage(text,duration=1000){
   messageBox.textContent=text;
   messageBox.style.display='block';
@@ -178,19 +230,14 @@ function showMessage(text,duration=1000){
 }
 
 // Key input
-const keys = {};
 document.addEventListener('keydown',e=>{
-  e.preventDefault();
-  keys[e.key] = true;
+  e.preventDefault(); // scroll lock
   if(e.key==='ArrowUp') player.dir='UP';
   if(e.key==='ArrowDown') player.dir='DOWN';
   if(e.key==='ArrowLeft') player.dir='LEFT';
   if(e.key==='ArrowRight') player.dir='RIGHT';
 });
-document.addEventListener('keyup',e=>{ keys[e.key]=false; });
 
 // Play button
-playBtn.addEventListener('click',()=>{
-  startLevel(1);
-});
+playBtn.addEventListener('click',()=>{ startLevel(1); });
 })();
