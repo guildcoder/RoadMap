@@ -7,7 +7,7 @@
 
 html, body {
   height: 100%;
-  background-color: #000; /* page background black */
+  background-color: #00000; /* page background black */
   font-family: 'Orbitron', sans-serif;
   color: #0ff;
   display: flex;
