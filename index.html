@@ -1,634 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>DIGIBIKE ROYALE</title>
-<style>
-  html,body{margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:Inter,system-ui,Arial;display:flex;flex-direction:column;}
-  #game{flex:1; cursor:none; background:#000;}
-  #bottomUI{display:flex;flex-direction:column;align-items:center;padding:6px;background:#111;}
-  #playerName{color:red;font-weight:bold;font-size:18px;margin-bottom:4px;}
-  #spotifyEmbed{width:100%;max-width:800px;height:80px;border:none;}
-  #scoreboard{position:absolute;left:12px;top:12px;z-index:30;background:rgba(0,0,0,0.35);padding:10px;border-radius:8px;font-size:13px;color:#fff}
-  #hud{position:absolute;right:12px;top:12px;z-index:40;background:rgba(0,0,0,0.25);padding:10px;border-radius:8px;font-size:13px;color:#fff;text-align:right;min-width:210px}
-  #hud h4{margin:0 0 6px 0;font-size:14px;color:#fff}
-  #fps{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,0.25);padding:6px 8px;border-radius:6px;color:#0ff;z-index:30}
-  #minimap{position:absolute;right:12px;top:120px;width:180px;height:140px;border-radius:6px;background:rgba(0,0,0,0.5);z-index:35;overflow:hidden}
-  #minimapCanvas{width:100%;height:100%;display:block}
-  #minimapLarge{position:fixed;right:50%;top:50%;transform:translate(50%,-50%);width:720px;height:480px;border-radius:8px;background:rgba(0,0,0,0.85);z-index:90;display:none;padding:12px}
-  #minimapLarge canvas{width:100%;height:100%;display:block;border-radius:6px}
-  .hudLine{font-size:13px;color:#fff;margin:3px 0}
-  .hudWarn{color:#ffb3b3}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tron Grid Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      background: repeating-linear-gradient(
+          to right,
+          #0ff 0px,
+          #0ff 2px,
+          transparent 2px,
+          transparent 40px
+        ),
+        repeating-linear-gradient(
+          to bottom,
+          #0ff 0px,
+          #0ff 2px,
+          transparent 2px,
+          transparent 40px
+        );
+    }
+  </style>
 </head>
 <body>
-
-<canvas id="game"></canvas>
-
-<div id="bottomUI">
-  <div id="playerName">DIGIBIKE ROYALE</div>
-  <iframe id="spotifyEmbed" src="https://open.spotify.com/embed/album/47pjW3XDPW99NShtkeewxl" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
-</div>
-
-<div id="scoreboard">
-  <h3 style="margin:0 0 6px 0">Top Entities</h3>
-  <ul id="scores" style="margin:0;padding:0 6px;list-style:none;max-height:180px;overflow:auto"></ul>
-</div>
-
-<div id="hud">
-  <h4>Battle Status</h4>
-  <div class="hudLine">Alive: <span id="aliveCount">0</span></div>
-  <div class="hudLine">Phase: <span id="phaseName">—</span></div>
-  <div class="hudLine">Until move: <span id="timeToMove">0s</span></div>
-  <div class="hudLine">Move ends in: <span id="timeToStop">0s</span></div>
-  <div class="hudLine">Hold remaining: <span id="timeToHold">0s</span></div>
-  <div class="hudLine hudWarn" id="warningText"></div>
-  <div style="font-size:11px;margin-top:6px">Hold <strong>Shift+R</strong> to expand minimap</div>
-</div>
-
-<div id="minimap"><canvas id="minimapCanvas" width="360" height="280"></canvas></div>
-
-<div id="minimapLarge"><canvas id="minimapLargeCanvas" width="1440" height="960"></canvas></div>
-
-<div id="fps">FPS: <span id="fpsNum">0</span></div>
+<canvas id="gameCanvas" width="700" height="500"></canvas>
 
 <script>
-/* DIGIBIKE ROYALE — full single-file implementation */
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-/* ---------- CONFIG ---------- */
-const MAP_SIZE = 4000;
-const PLAYER_SPEED = 220;
-const PLAYER_RADIUS = 8;
-const TRAIL_MIN_DIST = 6;
-const BOT_SPEED = 160;
-const TRAIL_WIDTH = 6;
-const COLLISION_DISTANCE = 8;
-const TICK_RATE = 60;
-const INITIAL_BOTS = 20;
-const TRAIL_POINT_LIMIT = 20; // limit number of points per entity (not raw pixels)
-const OUTSIDE_DAMAGE_THRESHOLD = 5.0; // seconds outside before death
-const STORM_SHRINK_FACTOR = 0.62; // target size = current * factor
-/* Phase durations (ms) */
-const PHASE_WAIT = 9000;   // time before storm starts moving
-const PHASE_MOVE = 6000;   // time during storm movement
-const PHASE_HOLD = 10000;  // hold duration after move
+const gridSize = 5; // movement grid
+let trail = [];
+let maxTrail = 200; // longer trail
+let direction = "RIGHT";
+let nextDirection = "RIGHT";
 
-/* ---------- CANVAS & UI ---------- */
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-let W = canvas.width = window.innerWidth;
-let H = canvas.height = Math.floor(window.innerHeight * 0.7);
-window.addEventListener('resize', () => { W = canvas.width = window.innerWidth; H = canvas.height = Math.floor(window.innerHeight * 0.7); });
+let player = { x: 100, y: 100, size: 5 };
+let storm = { x: 50, y: 50, w: 600, h: 400 };
 
-const fpsNum = document.getElementById('fpsNum');
-const scoresEl = document.getElementById('scores');
-const aliveCountEl = document.getElementById('aliveCount');
-const phaseNameEl = document.getElementById('phaseName');
-const timeToMoveEl = document.getElementById('timeToMove');
-const timeToStopEl = document.getElementById('timeToStop');
-const timeToHoldEl = document.getElementById('timeToHold');
-const warningTextEl = document.getElementById('warningText');
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-const minimapCanvas = document.getElementById('minimapCanvas');
-const mmCtx = minimapCanvas.getContext('2d');
-const minimapLarge = document.getElementById('minimapLarge');
-const minimapLargeCanvas = document.getElementById('minimapLargeCanvas');
-const mmLargeCtx = minimapLargeCanvas.getContext('2d');
+  // Draw storm
+  ctx.fillStyle = "rgba(255,0,0,0.3)";
+  ctx.fillRect(storm.x, storm.y, storm.w, storm.h);
 
-/* ---------- INPUT ---------- */
-let mouseX = W / 2, mouseY = H / 2;
-addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
-const keys = {};
-addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; updateMiniMapToggle(); });
-addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; updateMiniMapToggle(); });
-
-let miniMapExpanded = false;
-function updateMiniMapToggle(){
-  // require Shift + r to be held
-  if ((keys['shift'] || keys['shiftleft'] || keys['shiftright']) && keys['r']) {
-    miniMapExpanded = true;
-    minimapLarge.style.display = 'block';
-  } else {
-    miniMapExpanded = false;
-    minimapLarge.style.display = 'none';
+  // Draw trail
+  ctx.fillStyle = "cyan";
+  for (let i = 0; i < trail.length; i++) {
+    ctx.fillRect(trail[i].x, trail[i].y, player.size, player.size);
   }
+
+  // Draw player
+  ctx.fillStyle = "lime";
+  ctx.fillRect(player.x, player.y, player.size, player.size);
 }
 
-/* ---------- UTILS ---------- */
-function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
-function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
-function rand(min,max){ return Math.random()*(max-min)+min; }
+function update() {
+  direction = nextDirection;
 
-/* ---------- SPATIAL HASH for trails ---------- */
-class SpatialHash {
-  constructor(cellSize=120){ this.cellSize = cellSize; this.map = new Map(); }
-  insertSegment(x1,y1,x2,y2,data){
-    const minx = Math.min(x1,x2), maxx = Math.max(x1,x2), miny = Math.min(y1,y2), maxy = Math.max(y1,y2);
-    for(let xi = Math.floor(minx/this.cellSize); xi <= Math.floor(maxx/this.cellSize); xi++){
-      for(let yi = Math.floor(miny/this.cellSize); yi <= Math.floor(maxy/this.cellSize); yi++){
-        const key = xi + ',' + yi;
-        if(!this.map.has(key)) this.map.set(key,[]);
-        this.map.get(key).push(data);
-      }
-    }
-  }
-  queryRadius(x,y,r){
-    const out = new Set();
-    const minx = Math.floor((x-r)/this.cellSize), maxx = Math.floor((x+r)/this.cellSize);
-    const miny = Math.floor((y-r)/this.cellSize), maxy = Math.floor((y+r)/this.cellSize);
-    for(let xi = minx; xi <= maxx; xi++){
-      for(let yi = miny; yi <= maxy; yi++){
-        const arr = this.map.get(xi+','+yi);
-        if(arr) arr.forEach(it => out.add(it));
-      }
-    }
-    return Array.from(out);
-  }
-  clear(){ this.map.clear(); }
-}
-const trails = []; // global trail segments: {x1,y1,x2,y2,owner,w,color}
-const trailHash = new SpatialHash(120);
-function rebuildTrailHash(){ trailHash.clear(); trails.forEach(s => trailHash.insertSegment(s.x1,s.y1,s.x2,s.y2,s)); }
+  if (direction === "LEFT") player.x -= gridSize;
+  if (direction === "UP") player.y -= gridSize;
+  if (direction === "RIGHT") player.x += gridSize;
+  if (direction === "DOWN") player.y += gridSize;
 
-/* ---------- ENTITIES ---------- */
-let entities = {}, entityIdCounter = 1;
-class Entity {
-  constructor(opts){
-    this.id = (entityIdCounter++).toString();
-    this.name = opts.name || 'bot';
-    this.x = (opts.x!==undefined)?opts.x:rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
-    this.y = (opts.y!==undefined)?opts.y:rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
-    this.dir = opts.dir || rand(0, Math.PI*2);
-    this.speed = opts.speed || BOT_SPEED;
-    this.radius = opts.radius || PLAYER_RADIUS;
-    this.color = opts.color || this.randomColor();
-    this.alive = true;
-    this.trailPoints = [{x:this.x,y:this.y}]; // points for this entity
-    this.score = 0;
-    this.isPlayer = !!opts.isPlayer;
-    this.outsideTime = 0; // seconds outside storm
-    this.spawn();
-  }
-  randomColor(){ return ['#66ffea','#9ad1ff','#ffd86b','#ff9db4','#c09bff','#8bff8b'][Math.floor(Math.random()*6)]; }
-  spawn(){
-    this.alive = true;
-    this.trailPoints = [{x:this.x,y:this.y}];
-    this.recordTrailPoint(this.x,this.y); // initialize
-    this.outsideTime = 0;
-  }
-  recordTrailPoint(nx,ny){
-    const lp = this.trailPoints[this.trailPoints.length-1];
-    if(dist(lp.x,lp.y,nx,ny) >= TRAIL_MIN_DIST){
-      // push new point
-      this.trailPoints.push({x:nx,y:ny});
-      // clamp number of points to TRAIL_POINT_LIMIT
-      while(this.trailPoints.length > TRAIL_POINT_LIMIT){
-        // remove the oldest segment globally by searching matching coordinates and owner
-        const removedPoint = this.trailPoints.shift(); // removes first point (older)
-        // Note: We remove global segments that match owner and coordinates roughly.
-        // Easiest is to rebuild trails from all entities each time after pruning:
-        rebuildGlobalTrailsFromEntities();
-      }
-      // create segment between last two points and add to global trails
-      const a = this.trailPoints[this.trailPoints.length-2], b = this.trailPoints[this.trailPoints.length-1];
-      const seg = {x1:a.x, y1:a.y, x2:b.x, y2:b.y, owner:this.id, w:TRAIL_WIDTH, color:this.color};
-      trails.push(seg);
-      trailHash.insertSegment(seg.x1,seg.y1,seg.x2,seg.y2,seg);
-    }
-  }
-  die(){
-    this.alive = false;
-    // if player died — we'll leave them dead and enable spectator mode handled elsewhere
-    setTimeout(()=>{
-      // respawn as a bot spectator? For BR, dead players spectate — don't respawn alive
-      // We'll leave respawn disabled. But we can re-enable if desired.
-    }, 400);
-  }
-}
-
-/* Rebuild global trails by iterating all entities' trailPoints (keeps owner limits correct) */
-function rebuildGlobalTrailsFromEntities(){
-  trails.length = 0;
-  for(const id in entities){
-    const e = entities[id];
-    for(let i=1;i<e.trailPoints.length;i++){
-      const a = e.trailPoints[i-1], b = e.trailPoints[i];
-      trails.push({x1:a.x,y1:a.y,x2:b.x,y2:b.y,owner:e.id,w:TRAIL_WIDTH,color:e.color});
-    }
-  }
-  rebuildTrailHash();
-}
-
-/* ---------- PLAYER ---------- */
-const player = new Entity({name:'YOU', isPlayer:true, x:MAP_SIZE/2, y:MAP_SIZE/2, color:'#66ffea', speed:PLAYER_SPEED});
-entities[player.id] = player;
-
-/* ---------- BOT SPAWN ---------- */
-function spawnInitialBots(count){
-  for(let i=0;i<count;i++){
-    const b = new Entity({name:'bot'+Math.floor(rand(1000,9999)), speed:BOT_SPEED});
-    entities[b.id] = b;
-  }
-}
-spawnInitialBots(INITIAL_BOTS);
-
-/* ---------- COLLISION ---------- */
-function pointSegmentDistance(px,py,x1,y1,x2,y2){
-  const l2 = (x2-x1)**2 + (y2-y1)**2;
-  if(l2 === 0) return dist(px,py,x1,y1);
-  let t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1))/l2;
-  t = Math.max(0, Math.min(1, t));
-  return dist(px,py, x1 + t*(x2-x1), y1 + t*(y2-y1));
-}
-function checkTrailCollisionFor(entity){
-  const near = trailHash.queryRadius(entity.x, entity.y, COLLISION_DISTANCE + 6);
-  for(const seg of near){
-    if(seg.owner === entity.id) continue; // can't hit own trail
-    if(pointSegmentDistance(entity.x, entity.y, seg.x1, seg.y1, seg.x2, seg.y2) <= COLLISION_DISTANCE){
-      return seg;
-    }
-  }
-  return null;
-}
-
-/* ---------- BOT AI ---------- */
-function botSteer(bot, dt){
-  // occasional jitter
-  if(Math.random() < (dt/1000)*0.8) bot.dir += rand(-0.6, 0.6);
-  const margin = 150;
-  if(bot.x < margin) bot.dir = rand(-0.5, 0.5);
-  else if(bot.x > MAP_SIZE - margin) bot.dir = rand(-0.5, 0.5) + Math.PI;
-  if(bot.y < margin) bot.dir = rand(-0.5, 0.5) + Math.PI/2;
-  else if(bot.y > MAP_SIZE - margin) bot.dir = rand(-0.5, 0.5) + Math.PI*1.5;
-}
-
-/* ---------- STORM / SAFE ZONE (square) ---------- */
-const storm = {
-  x: MAP_SIZE/2 - MAP_SIZE/2, // top-left
-  y: MAP_SIZE/2 - MAP_SIZE/2,
-  size: MAP_SIZE,
-  target: { x: 0, y: 0, size: MAP_SIZE },
-  phase: 'wait', // 'wait' | 'moving' | 'hold'
-  phaseStart: performance.now(),
-  // helper to set next target square (random smaller area inside current)
-  scheduleNext(){
-    this.phase = 'wait';
-    this.phaseStart = performance.now();
-    // compute new target size and position
-    const newSize = Math.max(300, Math.floor(this.size * STORM_SHRINK_FACTOR));
-    // pick random position such that target fully inside current square
-    const maxTX = this.x + (this.size - newSize);
-    const maxTY = this.y + (this.size - newSize);
-    const tx = clamp(rand(this.x, maxTX), 0, MAP_SIZE - newSize);
-    const ty = clamp(rand(this.y, maxTY), 0, MAP_SIZE - newSize);
-    this.target = { x: tx, y: ty, size: newSize };
-    // timings already constants, we'll transit after PHASE_WAIT ms
-  },
-  startMove(){
-    this.phase = 'moving';
-    this.phaseStart = performance.now();
-  },
-  startHold(){
-    this.phase = 'hold';
-    this.phaseStart = performance.now();
-    // commit to target
-    this.x = this.target.x; this.y = this.target.y; this.size = this.target.size;
-  },
-  update(dt){
-    const now = performance.now();
-    if(this.phase === 'wait'){
-      if(now - this.phaseStart >= PHASE_WAIT) this.startMove();
-    } else if(this.phase === 'moving'){
-      const t = clamp((now - this.phaseStart) / PHASE_MOVE, 0, 1);
-      // interpolate towards target
-      this.x = this.x + (this.target.x - this.x) * t;
-      this.y = this.y + (this.target.y - this.y) * t;
-      this.size = this.size + (this.target.size - this.size) * t;
-      if(now - this.phaseStart >= PHASE_MOVE) {
-        this.startHold();
-      }
-    } else if(this.phase === 'hold'){
-      if(now - this.phaseStart >= PHASE_HOLD){
-        // after hold, schedule next shrink if more than minimum size remains
-        if(this.size > 320){
-          this.scheduleNext();
-        } else {
-          // final — keep hold
-          this.phase = 'final';
-          this.phaseStart = now;
-        }
-      }
-    }
-  },
-  timeUntilMove(){ const now = performance.now(); if(this.phase === 'wait') return Math.max(0, Math.ceil((PHASE_WAIT - (now - this.phaseStart))/1000)); return 0; },
-  timeUntilStop(){ const now = performance.now(); if(this.phase === 'moving') return Math.max(0, Math.ceil((PHASE_MOVE - (now - this.phaseStart))/1000)); if(this.phase === 'wait') return Math.max(0, Math.ceil((PHASE_WAIT + PHASE_MOVE - (now - this.phaseStart))/1000)); return 0; },
-  timeHoldRemaining(){ const now = performance.now(); if(this.phase === 'hold') return Math.max(0, Math.ceil((PHASE_HOLD - (now - this.phaseStart))/1000)); if(this.phase === 'moving') return Math.max(0, Math.ceil((PHASE_MOVE + PHASE_HOLD - (now - this.phaseStart))/1000)); if(this.phase === 'wait') return Math.max(0, Math.ceil((PHASE_WAIT + PHASE_MOVE + PHASE_HOLD - (now - this.phaseStart))/1000)); return 0; }
-};
-/* initialize storm */
-storm.x = 0; storm.y = 0; storm.size = MAP_SIZE;
-storm.scheduleNext();
-
-/* ---------- SIMULATION ---------- */
-function simulate(dt){
-  // update storm interpolation and timers
-  storm.update(dt);
-
-  // PLAYER
-  if(player.alive){
-    let worldMouseX = player.x + (mouseX - W/2);
-    let worldMouseY = player.y + (mouseY - H/2);
-    let dx = worldMouseX - player.x, dy = worldMouseY - player.y, ang = Math.atan2(dy,dx);
-    // keyboard overrides (relative rough direction)
-    if(keys['arrowup'] || keys['w']) ang = -Math.PI/2;
-    if(keys['arrowdown'] || keys['s']) ang = Math.PI/2;
-    if(keys['arrowleft'] || keys['a']) ang = Math.PI;
-    if(keys['arrowright'] || keys['d']) ang = 0;
-
-    // smooth turning
-    const diff = ((ang - player.dir + Math.PI) % (2*Math.PI)) - Math.PI;
-    player.dir += diff * clamp(0.18 * (dt/16.67), 0, 1);
-
-    // always move forward
-    player.vx = Math.cos(player.dir) * player.speed;
-    player.vy = Math.sin(player.dir) * player.speed;
-    player.x += player.vx * dt/1000;
-    player.y += player.vy * dt/1000;
-
-    // wrap world edges (toroidal)
-    if(player.x < 0) player.x += MAP_SIZE; if(player.x >= MAP_SIZE) player.x -= MAP_SIZE;
-    if(player.y < 0) player.y += MAP_SIZE; if(player.y >= MAP_SIZE) player.y -= MAP_SIZE;
-
-    player.recordTrailPoint(player.x, player.y);
-    if(checkTrailCollisionFor(player)) {
-      player.die();
-      enableSpectator();
-    }
-  } else {
-    // when dead, we let spectate logic handle camera
+  // Trail logic
+  trail.push({ x: player.x, y: player.y });
+  if (trail.length > maxTrail) {
+    trail.shift();
   }
 
-  // BOTS
-  for(const id in entities){
-    const e = entities[id];
-    if(e === player || !e.alive) continue;
-    botSteer(e, dt);
-    e.vx = Math.cos(e.dir) * e.speed; e.vy = Math.sin(e.dir) * e.speed;
-    e.x += e.vx * dt/1000; e.y += e.vy * dt/1000;
-    if(e.x < 0) e.x += MAP_SIZE; if(e.x >= MAP_SIZE) e.x -= MAP_SIZE;
-    if(e.y < 0) e.y += MAP_SIZE; if(e.y >= MAP_SIZE) e.y -= MAP_SIZE;
-    e.recordTrailPoint(e.x, e.y);
-    if(checkTrailCollisionFor(e)){
-      e.die();
+  // Collision with walls
+  if (
+    player.x < 0 ||
+    player.y < 0 ||
+    player.x >= canvas.width ||
+    player.y >= canvas.height
+  ) {
+    gameOver();
+  }
+
+  // Collision with own trail
+  for (let i = 0; i < trail.length - 1; i++) {
+    if (player.x === trail[i].x && player.y === trail[i].y) {
+      gameOver();
     }
   }
 
-  // Storm effect: increase outsideTime for entities outside storm square
-  for(const id in entities){
-    const e = entities[id];
-    if(!e.alive) continue;
-    if(!isInsideStorm(e.x, e.y)){
-      e.outsideTime += dt/1000;
-      if(e.outsideTime >= OUTSIDE_DAMAGE_THRESHOLD){
-        // outside too long -> die
-        e.die();
-      }
-    } else {
-      e.outsideTime = 0;
-    }
-  }
-
-  // update global trail hash occasionally or when needed
-  // done in recordTrailPoint via rebuilds when trimming happens; ensure hash is present
-}
-
-/* ---------- CAMERA ---------- */
-let camera = {x: player.x, y: player.y}; // camera follows player or spectated target
-let spectating = false;
-let spectatedId = null;
-
-function enableSpectator(){
-  spectating = true;
-  // pick first alive entity to follow
-  const alive = Object.values(entities).filter(e => e.alive);
-  if(alive.length) spectatedId = alive[0].id;
-}
-
-/* ---------- DRAW ---------- */
-function draw(){
-  ctx.save(); ctx.clearRect(0,0,W,H);
-  // background and neon grid (classic tron grid)
-  ctx.fillStyle = '#02050a'; ctx.fillRect(0,0,W,H);
-  const cam = getCamera();
-  const gridSize = 100;
-  ctx.strokeStyle = 'rgba(0,255,255,0.08)';
-  ctx.lineWidth = 1;
-  const startX = Math.floor((cam.x - W/2)/gridSize) * gridSize;
-  const endX = Math.floor((cam.x + W/2)/gridSize) * gridSize;
-  const startY = Math.floor((cam.y - H/2)/gridSize) * gridSize;
-  const endY = Math.floor((cam.y + H/2)/gridSize) * gridSize;
-  for(let gx = startX; gx <= endX; gx += gridSize){
-    const sx = gx - cam.x + W/2;
-    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
-  }
-  for(let gy = startY; gy <= endY; gy += gridSize){
-    const sy = gy - cam.y + H/2;
-    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
-  }
-
-  // draw visible trails
-  const visibleSegs = trailHash.queryRadius(cam.x, cam.y, Math.max(W, H)/2 + 200);
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  visibleSegs.forEach(seg=>{
-    const sx1 = seg.x1 - cam.x + W/2, sy1 = seg.y1 - cam.y + H/2;
-    const sx2 = seg.x2 - cam.x + W/2, sy2 = seg.y2 - cam.y + H/2;
-    ctx.strokeStyle = seg.color; ctx.lineWidth = seg.w;
-    ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
-    // glow
-    ctx.strokeStyle = seg.color + '44'; ctx.lineWidth = seg.w + 6; ctx.stroke();
-  });
-
-  // draw entities
-  for(const id in entities){
-    const e = entities[id];
-    const sx = e.x - cam.x + W/2, sy = e.y - cam.y + H/2;
-    if(sx < -100 || sx > W + 100 || sy < -100 || sy > H + 100) continue;
-    ctx.beginPath();
-    ctx.fillStyle = e.color;
-    ctx.arc(sx, sy, e.radius, 0, Math.PI*2);
-    ctx.fill();
-    if(e.id === spectatedId){
-      ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
-    }
-  }
-
-  // draw storm square (on top)
-  ctx.save();
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,W,H);
-  ctx.globalAlpha = 1;
-  // visualize safe zone rectangle boundary
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 3;
-  const sx = storm.x - cam.x + W/2, sy = storm.y - cam.y + H/2, sSize = storm.size;
-  ctx.strokeRect(sx, sy, sSize, sSize);
-  // darken outside more
-  ctx.beginPath();
-  ctx.rect(0,0,W,H);
-  ctx.rect(sx, sy, sSize, sSize);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fill('evenodd');
-  ctx.restore();
-
-  ctx.restore();
-}
-
-/* ---------- CAMERA AUX ---------- */
-function getCamera(){
-  if(player.alive && !spectating){
-    camera.x = player.x; camera.y = player.y;
-  } else {
-    // spectating — follow spectatedId or free roam
-    const target = entities[spectatedId] || Object.values(entities).find(e => e.alive);
-    if(target){
-      camera.x = target.x; camera.y = target.y;
-    }
-  }
-  return camera;
-}
-
-/* ---------- STORM INSIDE CHECK ---------- */
-function isInsideStorm(x,y){
-  return x >= storm.x && x <= storm.x + storm.size && y >= storm.y && y <= storm.y + storm.size;
-}
-
-/* ---------- SCOREBOARD & HUD ---------- */
-function updateScores(){
-  const arr = Object.values(entities).sort((a,b) => (b.score||0) - (a.score||0)).slice(0,8);
-  scoresEl.innerHTML = '';
-  arr.forEach(e=>{
-    const li = document.createElement('li');
-    li.textContent = `${e.name}${e.isPlayer? ' (you)':''} ${e.alive? '':'(dead)'}`;
-    scoresEl.appendChild(li);
-  });
-  const aliveCount = Object.values(entities).filter(e => e.alive).length;
-  aliveCountEl.textContent = aliveCount;
-  // HUD timers
-  phaseNameEl.textContent = storm.phase;
-  timeToMoveEl.textContent = storm.timeUntilMove() + 's';
-  timeToStopEl.textContent = storm.timeUntilStop() + 's';
-  timeToHoldEl.textContent = storm.timeHoldRemaining() + 's';
-  // warnings
-  if(storm.phase === 'wait' && storm.timeUntilMove() <= 3) warningTextEl.textContent = 'Storm moving soon!';
-  else if(storm.phase === 'moving') warningTextEl.textContent = 'Storm moving — get inside!';
-  else if(storm.phase === 'hold') warningTextEl.textContent = '';
-  else warningTextEl.textContent = '';
-}
-
-/* ---------- MINIMAP ---------- */
-function drawMiniMap(ctx2, w, h, showViewport=true){
-  ctx2.clearRect(0,0,w,h);
-  // background
-  ctx2.fillStyle = '#06060a';
-  ctx2.fillRect(0,0,w,h);
-  // scale factors
-  const sx = w / MAP_SIZE, sy = h / MAP_SIZE;
-  // safe zone
-  ctx2.fillStyle = 'rgba(0,200,255,0.12)';
-  ctx2.strokeStyle = 'rgba(0,200,255,0.6)';
-  ctx2.lineWidth = 2;
-  ctx2.fillRect(storm.x * sx, storm.y * sy, storm.size * sx, storm.size * sy);
-  ctx2.strokeRect(storm.x * sx, storm.y * sy, storm.size * sx, storm.size * sy);
-  // entities
-  for(const id in entities){
-    const e = entities[id];
-    const ex = e.x * sx, ey = e.y * sy;
-    ctx2.beginPath();
-    ctx2.fillStyle = e.alive ? e.color : 'rgba(255,255,255,0.12)';
-    ctx2.arc(ex, ey, e.isPlayer?4:2, 0, Math.PI*2);
-    ctx2.fill();
-  }
-  // viewport rect
-  if(showViewport){
-    const vx = (camera.x - W/2) * sx, vy = (camera.y - H/2) * sy, vw = W * sx, vh = H * sy;
-    ctx2.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx2.lineWidth = 1;
-    ctx2.strokeRect(vx, vy, vw, vh);
+  // Collision with storm
+  if (
+    player.x < storm.x ||
+    player.y < storm.y ||
+    player.x + player.size > storm.x + storm.w ||
+    player.y + player.size > storm.y + storm.h
+  ) {
+    gameOver();
   }
 }
 
-/* ---------- SPECTATOR: on player death let them spectate live players ---------- */
-function lockSpectatedToNextAlive(){
-  const alive = Object.values(entities).filter(e => e.alive);
-  if(alive.length) spectatedId = alive[0].id;
+function gameOver() {
+  alert("Game Over!");
+  player = { x: 100, y: 100, size: 5 };
+  trail = [];
+  direction = "RIGHT";
+  nextDirection = "RIGHT";
 }
 
-/* ---------- INIT ---------- */
-rebuildGlobalTrailsFromEntities();
-
-/* ---------- MAIN LOOP ---------- */
-let lastTs = performance.now();
-let fpsHistory = [];
-let accumulator = 0;
-function mainLoop(ts){
-  const dt = ts - lastTs;
-  lastTs = ts;
-  accumulator += dt;
-  const step = 1000 / TICK_RATE;
-  while(accumulator >= step){
-    simulate(step);
-    accumulator -= step;
-  }
-  draw();
-  updateScores();
-  // minimap draws
-  drawMiniMap(mmCtx, minimapCanvas.width, minimapCanvas.height, true);
-  if(miniMapExpanded) drawMiniMap(mmLargeCtx, minimapLargeCanvas.width, minimapLargeCanvas.height, true);
-  // fps
-  const fps = 1000 / dt;
-  fpsHistory.push(fps); if(fpsHistory.length > 30) fpsHistory.shift();
-  fpsNum.textContent = Math.round(fpsHistory.reduce((a,b)=>a+b,0) / fpsHistory.length);
-  // check endgame
-  const aliveList = Object.values(entities).filter(e => e.alive);
-  if(aliveList.length <= 1){
-    // declare winner, stop simulation (for demo we simply freeze)
-    if(aliveList.length === 1){
-      // highlight winner in scoreboard
-      // no respawns; stop game loop
-    }
-  }
-  requestAnimationFrame(mainLoop);
-}
-requestAnimationFrame(mainLoop);
-
-/* ---------- helper: initial spawn fix & scoreboard ordering ---------- */
-/* ensure we have exactly INITIAL_BOTS bots + player (no extra) */
-(function tidyInitialCounts(){
-  const bots = Object.values(entities).filter(e => !e.isPlayer);
-  if(bots.length > INITIAL_BOTS){
-    // remove extras
-    let removeCount = bots.length - INITIAL_BOTS;
-    for(const b of bots){
-      if(removeCount <= 0) break;
-      delete entities[b.id]; removeCount--;
-    }
-    rebuildGlobalTrailsFromEntities();
-  } else if(bots.length < INITIAL_BOTS){
-    spawnInitialBots(INITIAL_BOTS - bots.length);
-  }
-})();
-
-/* ---------- utility: click to cycle spectated target while spectating ---------- */
-addEventListener('click', ()=>{
-  if(spectating){
-    const alive = Object.values(entities).filter(e => e.alive);
-    if(alive.length){
-      const idx = alive.findIndex(a => a.id === spectatedId);
-      spectatedId = alive[(idx + 1) % alive.length].id;
-    }
-  }
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft" && direction !== "RIGHT") nextDirection = "LEFT";
+  if (e.key === "ArrowUp" && direction !== "DOWN") nextDirection = "UP";
+  if (e.key === "ArrowRight" && direction !== "LEFT") nextDirection = "RIGHT";
+  if (e.key === "ArrowDown" && direction !== "UP") nextDirection = "DOWN";
 });
+
+function gameLoop() {
+  update();
+  draw();
+}
+setInterval(gameLoop, 60);
 </script>
 </body>
 </html>
