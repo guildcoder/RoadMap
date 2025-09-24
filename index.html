@@ -1,25 +1,30 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>DIGIgridChase</title>
 <style>
-  html,body { margin:0; padding:0; height:100%; background:#0b0b0d; color:#eaeaea; font-family:Inter,Arial,sans-serif; }
+  html,body { height:100%; margin:0; background:#0b0b0d; color:#eaeaea; font-family:Inter,system-ui,Arial; }
   #game { display:block; width:100vw; height:100vh; background: radial-gradient(ellipse at center, #071017 0%, #000 60%); cursor:none; }
-  #ui { position:absolute; left:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px 12px; border-radius:8px; backdrop-filter:blur(4px); color:#dfefff; font-size:13px; }
-  #scoreboard { position:absolute; right:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; }
+  .ui {
+    position: absolute; left:12px; top:12px; z-index:10;
+    background: rgba(0,0,0,0.25); padding:10px 12px; border-radius:8px;
+    backdrop-filter: blur(4px); color:#dfefff; font-size:13px;
+  }
+  .ui small { display:block; color:#9fb6d8; margin-top:6px; font-size:12px; }
+  #scoreboard { position: absolute; right:12px; top:12px; z-index:10; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; }
   #scoreboard h3 { margin:0 0 6px 0; font-size:14px; }
   #scoreboard ul { margin:0; padding:0 6px; list-style:none; font-size:13px; max-height:220px; overflow:auto; }
-  #spotifyBtn { position:absolute; top:12px; right:12px; z-index:20; background:#1db954; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:13px; }
   #hint { position:absolute; left:50%; bottom:20px; transform:translateX(-50%); color:#9fb6d8; font-size:13px; opacity:0.9; }
+  #spotifyBtn { position:absolute; top:12px; right:12px; z-index:20; background:#1db954; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:13px; }
   #fps { position:absolute; left:12px; bottom:12px; background:rgba(0,0,0,0.25); padding:6px 8px; border-radius:6px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div id="ui">
+<div class="ui" id="ui">
   <strong>DIGIgridChase</strong>
   <small>Move: mouse or WASD / arrows • Left click to boost • Respawn on death</small>
 </div>
@@ -29,220 +34,173 @@
   <ul id="scores"></ul>
 </div>
 
-<button id="spotifyBtn">▶ Play</button>
-
 <div id="hint">Tip: Only one player? Local bots will appear to chase you!</div>
 <div id="fps">FPS: <span id="fpsNum">0</span></div>
 
-<!-- Embed Spotify iframe hidden (we control play via button) -->
+<button id="spotifyBtn">▶ Play</button>
 <iframe id="spotifyEmbed" src="https://open.spotify.com/embed/album/47pjW3XDPW99NShtkeewxl" width="0" height="0" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
 
 <script>
-/* ==== DIGIgridChase main script ==== */
+/* DIGIgridChase single-file demo */
 
-// CONFIG
-const MAP_SIZE = 10000;
-const PLAYER_SPEED = 220;
-const PLAYER_RADIUS = 8;
-const TRAIL_MIN_DIST = 4;
-const TRAIL_WIDTH = 6;
-const BOT_COUNT_INITIAL = 3;
-const BOT_SPEED = 160;
-const BOT_SPAWN_INTERVAL = 3000;
-const TICK_RATE = 60;
-const COLLISION_DISTANCE = 8;
-const MAX_TRAIL_SEGMENTS = 100000;
+// SETTINGS
+const MAP_SIZE = 10000, PLAYER_SPEED = 220, PLAYER_RADIUS = 8, TRAIL_MIN_DIST = 4, BOT_COUNT_INITIAL=1, BOT_MAX=20, BOT_SPEED=160, BOT_SPAWN_INTERVAL=3000, TRAIL_WIDTH=6, MAX_TRAIL_SEGMENTS=100000, COLLISION_DISTANCE=8, TICK_RATE=60;
 
 // GLOBALS
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-let W = canvas.width = innerWidth;
-let H = canvas.height = innerHeight;
-let lastTs = performance.now();
-let paused = false;
-
-window.addEventListener('resize', () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; });
+const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+let W=canvas.width=innerWidth, H=canvas.height=innerHeight, lastTs=performance.now(), paused=false;
+window.addEventListener('resize',()=>{W=canvas.width=innerWidth; H=canvas.height=innerHeight;});
 
 // UI
-const fpsNum = document.getElementById('fpsNum');
-const scoresEl = document.getElementById('scores');
-const spotifyBtn = document.getElementById('spotifyBtn');
-const spotifyEmbed = document.getElementById('spotifyEmbed');
-let spotifyPlaying = false;
-spotifyBtn.onclick = () => {
-  spotifyPlaying = !spotifyPlaying;
-  if(spotifyPlaying){
-    spotifyBtn.textContent = '⏸ Pause';
-    spotifyEmbed.contentWindow.postMessage({ method: 'play' }, '*');
-  } else {
-    spotifyBtn.textContent = '▶ Play';
-    spotifyEmbed.contentWindow.postMessage({ method: 'pause' }, '*');
-  }
+const fpsNum=document.getElementById('fpsNum'), scoresEl=document.getElementById('scores');
+const spotifyBtn=document.getElementById('spotifyBtn'), spotifyEmbed=document.getElementById('spotifyEmbed');
+let spotifyPlaying=false;
+spotifyBtn.onclick=()=>{
+  spotifyPlaying=!spotifyPlaying;
+  if(spotifyPlaying){ spotifyBtn.textContent='⏸ Pause'; spotifyEmbed.contentWindow.postMessage({ method: 'play' }, '*'); }
+  else{ spotifyBtn.textContent='▶ Play'; spotifyEmbed.contentWindow.postMessage({ method: 'pause' }, '*'); }
 };
 
 // INPUT
-let mouseX = W/2, mouseY = H/2, mouseDown=false;
-addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
-addEventListener('mousedown', ()=>{ mouseDown=true; });
-addEventListener('mouseup', ()=>{ mouseDown=false; });
-const keys = {};
-addEventListener('keydown', (e)=>keys[e.key.toLowerCase()]=true);
-addEventListener('keyup', (e)=>keys[e.key.toLowerCase()]=false);
+let mouseX=W/2, mouseY=H/2, mouseDown=false;
+addEventListener('mousemove',e=>{mouseX=e.clientX; mouseY=e.clientY;});
+addEventListener('mousedown',()=>{mouseDown=true;});
+addEventListener('mouseup',()=>{mouseDown=false;});
+const keys={};
+addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
 // UTILS
-function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
-function rand(min,max){ return Math.random()*(max-min)+min; }
-function now(){ return performance.now(); }
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function dist(ax,ay,bx,by){return Math.hypot(ax-bx,ay-by);}
+function rand(min,max){return Math.random()*(max-min)+min;}
+function now(){return performance.now();}
 
-// TRAILS
-const trails = [];
-class TrailSegment { constructor(x1,y1,x2,y2,color){ this.x1=x1; this.y1=y1; this.x2=x2; this.y2=y2; this.color=color; } }
+// Trail collision
+class SpatialHash{
+  constructor(cellSize=100){this.cellSize=cellSize; this.map=new Map();}
+  _key(x,y){return Math.floor(x/this.cellSize)+','+Math.floor(y/this.cellSize);}
+  insertSegment(x1,y1,x2,y2,data){
+    const minx=Math.min(x1,x2), maxx=Math.max(x1,x2), miny=Math.min(y1,y2), maxy=Math.max(y1,y2);
+    for(let xi=Math.floor(minx/this.cellSize); xi<=Math.floor(maxx/this.cellSize); xi++)
+      for(let yi=Math.floor(miny/this.cellSize); yi<=Math.floor(maxy/this.cellSize); yi++){
+        const key=xi+','+yi;
+        if(!this.map.has(key)) this.map.set(key,[]);
+        this.map.get(key).push(data);
+      }
+  }
+  queryRadius(x,y,r){
+    const minx=Math.floor((x-r)/this.cellSize), maxx=Math.floor((x+r)/this.cellSize),
+          miny=Math.floor((y-r)/this.cellSize), maxy=Math.floor((y+r)/this.cellSize);
+    const out=new Set();
+    for(let xi=minx; xi<=maxx; xi++)
+      for(let yi=miny; yi<=maxy; yi++){
+        const arr=this.map.get(xi+','+yi); if(arr) arr.forEach(it=>out.add(it));
+      }
+    return Array.from(out);
+  }
+  clear(){this.map.clear();}
+}
+const trails=[], trailHash=new SpatialHash(120);
 
 // ENTITIES
-let entities = {};
-let entityIdCounter = 1;
-class Entity {
+let entities={}, entityIdCounter=1;
+class Entity{
   constructor(opts){
-    this.id = (entityIdCounter++).toString();
-    this.name = opts.name || 'bot';
-    this.x = opts.x || rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
-    this.y = opts.y || rand(MAP_SIZE*0.1, MAP_SIZE*0.9);
-    this.dir = opts.dir || rand(0, Math.PI*2);
-    this.speed = opts.speed || BOT_SPEED;
-    this.radius = opts.radius || PLAYER_RADIUS;
-    this.color = opts.color || this.randomColor();
-    this.alive = true;
-    this.lastTrailX = this.x;
-    this.lastTrailY = this.y;
-    this.isPlayer = !!opts.isPlayer;
-    this.boost = false;
-    this.score = 0;
+    this.id=(entityIdCounter++).toString();
+    this.name=opts.name||'bot'; this.x=opts.x||rand(MAP_SIZE*0.1,MAP_SIZE*0.9);
+    this.y=opts.y||rand(MAP_SIZE*0.1,MAP_SIZE*0.9); this.dir=opts.dir||rand(0,Math.PI*2);
+    this.speed=opts.speed||BOT_SPEED; this.radius=opts.radius||PLAYER_RADIUS;
+    this.color=opts.color||this.randomColor(); this.alive=true;
+    this.lastTrailX=this.x; this.lastTrailY=this.y; this.score=0;
+    this.isPlayer=!!opts.isPlayer; this.boost=false; this.spawn();
   }
-  randomColor(){
-    const palette = ['#66ffea','#9ad1ff','#ffd86b','#ff9db4','#c09bff','#8bff8b'];
-    return palette[Math.floor(Math.random()*palette.length)];
-  }
-  recordTrail(nx,ny){
-    const d = dist(this.lastTrailX,this.lastTrailY,nx,ny);
-    if(d>=TRAIL_MIN_DIST){
-      trails.push(new TrailSegment(this.lastTrailX,this.lastTrailY,nx,ny,this.color));
-      this.lastTrailX = nx; this.lastTrailY = ny;
-      if(trails.length>MAX_TRAIL_SEGMENTS) trails.splice(0,trails.length-MAX_TRAIL_SEGMENTS);
+  randomColor(){ return ['#66ffea','#9ad1ff','#ffd86b','#ff9db4','#c09bff','#8bff8b'][Math.floor(Math.random()*6)]; }
+  spawn(){ this.alive=true; this.lastTrailX=this.x; this.lastTrailY=this.y; this.score=0; this.recordTrailPoint(this.x,this.y); }
+  recordTrailPoint(nx,ny){
+    if(dist(this.lastTrailX,this.lastTrailY,nx,ny)>=TRAIL_MIN_DIST){
+      const seg={x1:this.lastTrailX,y1:this.lastTrailY,x2:nx,y2:ny,owner:this.id,w:TRAIL_WIDTH,color:this.color};
+      trails.push(seg); trailHash.insertSegment(seg.x1,seg.y1,seg.x2,seg.y2,seg);
+      this.lastTrailX=nx; this.lastTrailY=ny;
+      if(trails.length>MAX_TRAIL_SEGMENTS){ trails.splice(0,trails.length-MAX_TRAIL_SEGMENTS); rebuildTrailHash();}
     }
   }
-  die(){ this.alive=false; setTimeout(()=>{ this.spawn(); },900); }
-  spawn(){ this.alive=true; this.lastTrailX=this.x; this.lastTrailY=this.y; this.score=0; }
+  die(){ this.alive=false; setTimeout(()=>{this.x=rand(MAP_SIZE*0.05,MAP_SIZE*0.95); this.y=rand(MAP_SIZE*0.05,MAP_SIZE*0.95); this.dir=rand(0,Math.PI*2); this.spawn();},900);}
 }
+function rebuildTrailHash(){trailHash.clear(); trails.forEach(seg=>trailHash.insertSegment(seg.x1,seg.y1,seg.x2,seg.y2,seg));}
 
 // PLAYER
-const player = new Entity({name:'You', isPlayer:true, x:MAP_SIZE/2, y:MAP_SIZE/2, color:'#66ffea', speed:PLAYER_SPEED});
-entities[player.id] = player;
+const player=new Entity({name:'You',isPlayer:true,x:MAP_SIZE/2,y:MAP_SIZE/2,color:'#66ffea'}); entities[player.id]=player;
 
 // BOTS
-function spawnBot(){
-  const b = new Entity({name:'bot'+Math.floor(rand(1000,9999)), speed:BOT_SPEED});
-  entities[b.id] = b;
-  return b;
-}
+function spawnBot(){ if(Object.values(entities).filter(e=>!e.isPlayer).length>=BOT_MAX) return; const b=new Entity({name:'bot'+Math.floor(rand(1000,9999)),x:rand(0,MAP_SIZE),y:rand(0,MAP_SIZE),speed:BOT_SPEED}); b.dir=rand(0,Math.PI*2); entities[b.id]=b; return b;}
 for(let i=0;i<BOT_COUNT_INITIAL;i++) spawnBot();
-setInterval(()=>{
-  if(Object.values(entities).filter(e=>!e.isPlayer).length<5) spawnBot();
-}, BOT_SPAWN_INTERVAL);
+setInterval(()=>{ if(!paused && Object.values(entities).length<=1) spawnBot(); }, BOT_SPAWN_INTERVAL);
 
-// SIMULATION
+// BOT steering
+function botSteer(bot,dt){ if(Math.random()<(dt/1000)*0.8) bot.dir+=rand(-0.7,0.7); const margin=150; if(bot.x<margin) bot.dir=rand(-0.5,0.5)+0; else if(bot.x>MAP_SIZE-margin) bot.dir=rand(-0.5,0.5)+Math.PI; if(bot.y<margin) bot.dir=rand(-0.5,0.5)+Math.PI/2; else if(bot.y>MAP_SIZE-margin) bot.dir=rand(-0.5,0.5)+Math.PI*1.5;}
+
+// Collision
+function pointSegmentDistance(px,py,x1,y1,x2,y2){const l2=(x2-x1)**2+(y2-y1)**2; if(l2===0)return dist(px,py,x1,y1); let t=((px-x1)*(x2-x1)+(py-y1)*(y2-y1))/l2; t=Math.max(0,Math.min(1,t)); return dist(px,py,x1+t*(x2-x1),y1+t*(y2-y1));}
+function checkTrailCollisionFor(entity){const near=trailHash.queryRadius(entity.x,entity.y,COLLISION_DISTANCE+8); for(const seg of near){if(seg.owner===entity.id)continue; if(pointSegmentDistance(entity.x,entity.y,seg.x1,seg.y1,seg.x2,seg.y2)<=COLLISION_DISTANCE) return seg;} return null;}
+
+// SIMULATE
 function simulate(dt){
-  // PLAYER
   if(player.alive){
-    const worldMouseX = player.x + (mouseX - W/2);
-    const worldMouseY = player.y + (mouseY - H/2);
-    let dx = worldMouseX-player.x, dy = worldMouseY-player.y;
-    let ang = Math.atan2(dy,dx);
-    const inputVX = (keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0);
-    const inputVY = (keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0);
-    if(inputVX||inputVY) ang = Math.atan2(inputVY,inputVX);
-    const diff = ((ang - player.dir + Math.PI) % (2*Math.PI)) - Math.PI;
-    player.dir += diff * clamp(0.12*(dt/16.67),0,1);
-    const effectiveSpeed = player.speed*(mouseDown?1.6:1.0);
-    player.x += Math.cos(player.dir)*effectiveSpeed*dt/1000;
-    player.y += Math.sin(player.dir)*effectiveSpeed*dt/1000;
-    player.recordTrail(player.x,player.y);
+    const worldMouseX=player.x+(mouseX-W/2), worldMouseY=player.y+(mouseY-H/2);
+    let inputVX=0,inputVY=0;
+    if(keys['arrowup']||keys['w']) inputVY-=1; if(keys['arrowdown']||keys['s']) inputVY+=1; if(keys['arrowleft']||keys['a']) inputVX-=1; if(keys['arrowright']||keys['d']) inputVX+=1;
+    let dx=worldMouseX-player.x, dy=worldMouseY-player.y; let ang=Math.atan2(dy,dx);
+    if(Math.abs(inputVX)+Math.abs(inputVY)>0) ang=Math.atan2(inputVY,inputVX);
+    const diff=((ang-player.dir+Math.PI)%(2*Math.PI))-Math.PI; player.dir+=diff*clamp(0.12*(dt/16.67),0,1);
+    const effectiveSpeed=player.speed*(mouseDown?1.6:1);
+    player.vx=Math.cos(player.dir)*effectiveSpeed; player.vy=Math.sin(player.dir)*effectiveSpeed;
+    player.x+=player.vx*dt/1000; player.y+=player.vy*dt/1000;
+    if(player.x<0) player.x+=MAP_SIZE; if(player.x>=MAP_SIZE) player.x-=MAP_SIZE; if(player.y<0) player.y+=MAP_SIZE; if(player.y>=MAP_SIZE) player.y-=MAP_SIZE;
+    player.recordTrailPoint(player.x,player.y);
+    if(checkTrailCollisionFor(player)) player.die();
   }
-
-  // BOTS
-  Object.values(entities).filter(e=>!e.isPlayer).forEach(bot=>{
-    if(!bot.alive) return;
-    const target = player;
-    const dx = target.x - bot.x;
-    const dy = target.y - bot.y;
-    const ang = Math.atan2(dy,dx);
-    const diff = ((ang - bot.dir + Math.PI) % (2*Math.PI)) - Math.PI;
-    bot.dir += diff*0.03*(dt/16.67);
-    bot.x += Math.cos(bot.dir)*bot.speed*dt/1000;
-    bot.y += Math.sin(bot.dir)*bot.speed*dt/1000;
-    bot.recordTrail(bot.x,bot.y);
-  });
-
-  // Collision with trails
-  Object.values(entities).forEach(ent=>{
-    if(!ent.alive) return;
-    trails.forEach(t=>{
-      if(dist(ent.x,ent.y,t.x1,t.y1)<COLLISION_DISTANCE || dist(ent.x,ent.y,t.x2,t.y2)<COLLISION_DISTANCE){
-        ent.die();
-      }
-    });
-  });
-
-  // Update scores (longest trail)
-  Object.values(entities).forEach(e=>{ e.score = trails.filter(t=>t.color===e.color).length; });
+  for(const id in entities){const e=entities[id]; if(e===player||!e.alive) continue; botSteer(e,dt); e.vx=Math.cos(e.dir)*e.speed; e.vy=Math.sin(e.dir)*e.speed; e.x+=e.vx*dt/1000; e.y+=e.vy*dt/1000; if(e.x<0)e.x+=MAP_SIZE;if(e.x>=MAP_SIZE)e.x-=MAP_SIZE;if(e.y<0)e.y+=MAP_SIZE;if(e.y>=MAP_SIZE)e.y-=MAP_SIZE; e.recordTrailPoint(e.x,e.y); if(checkTrailCollisionFor(e)) e.die();}
 }
+
+// CAMERA
+function getCamera(){return {x:player.x,y:player.y};}
 
 // DRAW
 function draw(){
-  ctx.clearRect(0,0,W,H);
-  ctx.save();
-  // Camera centered on player
-  ctx.translate(W/2 - player.x, H/2 - player.y);
-
-  // Trails
-  trails.forEach(t=>{
-    ctx.strokeStyle = t.color;
-    ctx.lineWidth = TRAIL_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(t.x1,t.y1);
-    ctx.lineTo(t.x2,t.y2);
-    ctx.stroke();
-  });
-
-  // Entities
-  Object.values(entities).forEach(e=>{
-    if(!e.alive) return;
-    ctx.fillStyle = e.color;
-    ctx.beginPath();
-    ctx.arc(e.x,e.y,e.radius,0,2*Math.PI);
-    ctx.fill();
-  });
-
+  ctx.save(); ctx.clearRect(0,0,W,H);
+  const cam=getCamera();
+  ctx.fillStyle='#020509'; ctx.fillRect(0,0,W,H);
+  const gridSize=200;
+  const startX=Math.floor((cam.x-W/2)/gridSize)*gridSize, endX=Math.floor((cam.x+W/2)/gridSize)*gridSize;
+  const startY=Math.floor((cam.y-H/2)/gridSize)*gridSize, endY=Math.floor((cam.y+H/2)/gridSize)*gridSize;
+  ctx.strokeStyle='rgba(255,255,255,0.02)'; ctx.lineWidth=1;
+  for(let gx=startX;gx<=endX;gx+=gridSize){ const sx=Math.round(gx-cam.x+W/2); ctx.beginPath(); ctx.moveTo(sx,0); ctx.lineTo(sx,H); ctx.stroke();}
+  for(let gy=startY;gy<=endY;gy+=gridSize){ const sy=Math.round(gy-cam.y+H/2); ctx.beginPath(); ctx.moveTo(0,sy); ctx.lineTo(W,sy); ctx.stroke();}
+  const visibleSegs=trailHash.queryRadius(cam.x,cam.y,Math.max(W,H)/2+200);
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(const seg of visibleSegs){ctx.beginPath(); const sx1=seg.x1-cam.x+W/2, sy1=seg.y1-cam.y+H/2, sx2=seg.x2-cam.x+W/2, sy2=seg.y2-cam.y+H/2; ctx.strokeStyle=seg.color; ctx.lineWidth=seg.w; ctx.moveTo(sx1,sy1); ctx.lineTo(sx2,sy2); ctx.stroke(); ctx.strokeStyle=seg.color+'44'; ctx.lineWidth=seg.w+6; ctx.stroke();}
+  for(const id in entities){const e=entities[id]; const sx=e.x-cam.x+W/2, sy=e.y-cam.y+H/2; if(sx<-100||sx>W+100||sy<-100||sy>H+100) continue; ctx.beginPath(); ctx.fillStyle=e.color; ctx.arc(sx,sy,e.radius+(e.boost?2:0),0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.fillStyle='#00000033'; ctx.arc(sx+Math.cos(e.dir)*(e.radius+3),sy+Math.sin(e.dir)*(e.radius+3),3,0,Math.PI*2); ctx.fill(); ctx.font='12px Inter,Arial'; ctx.fillStyle='#e9f1ff'; ctx.fillText(e.name,sx+12,sy-10);}
+  ctx.beginPath(); ctx.strokeStyle='#ffffff22'; ctx.lineWidth=1; ctx.arc(W/2,H/2,10,0,Math.PI*2); ctx.stroke();
   ctx.restore();
 }
 
-// GAME LOOP
-let frames = 0, fps=0, lastFpsTs=now();
-function loop(ts){
-  const dt = ts-lastTs;
-  lastTs=ts;
-  if(!paused){
-    simulate(dt);
-    draw();
-  }
-  // FPS
-  frames++;
-  if(ts-lastFpsTs>1000){ fps=frames; frames=0; lastFpsTs=ts; fpsNum.textContent=fps; }
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+// SCOREBOARD
+function updateScores(){const arr=Object.values(entities).slice().sort((a,b)=>b.score-b.score).slice(0,8); scoresEl.innerHTML=''; arr.forEach(e=>{const li=document.createElement('li'); li.textContent=`${e.name} ${e.isPlayer?'(you)':''} — ${Math.round(e.score)}`; scoresEl.appendChild(li);});}
 
-// UTIL
-function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+// FPS
+let fpsHistory=[];
+function trackFPS(dt){const fps=1000/dt; fpsHistory.push(fps); if(fpsHistory.length>30) fpsHistory.shift(); fpsNum.textContent=Math.round(fpsHistory.reduce((a,b)=>a+b,0)/fpsHistory.length);}
+
+// MAIN LOOP
+let accumulator=0;
+function mainLoop(ts){
+  const dt=ts-lastTs; lastTs=ts;
+  if(!paused){ accumulator+=dt; const step=1000/TICK_RATE; while(accumulator>=step){simulate(step); accumulator-=step;} draw(); updateScores(); trackFPS(dt);}
+  requestAnimationFrame(mainLoop);
+}
+requestAnimationFrame(mainLoop);
+rebuildTrailHash();
 </script>
 </body>
 </html>
