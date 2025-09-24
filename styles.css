@@ -1,80 +1,128 @@
 :root{
-  --bg:#000;
-  --grid:#222;
-  --panel-bg: rgba(0,0,0,0.6);
-  --ui-color: #ddd;
-  --accent: #4dd;
+  --bg: #000;
+  --panel: rgba(0,0,0,0.6);
+  --neon: #00FFFF; /* updated dynamically to match player color */
+  --ui: #dfefff;
+  --frame-radius: 14px;
+  --orbitron: 'Orbitron', sans-serif;
 }
 
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--ui-color);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;}
+/* reset */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);font-family:var(--orbitron);color:var(--ui);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 
-canvas{display:block;width:100vw;height:100vh}
+main#stage{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
 
-#ui{
-  position:fixed;
-  inset:0;
+/* frame (neon border) */
+#frame{
+  width: 820px; /* canvas plus border */
+  background: linear-gradient(180deg,#000 0%, #050505 100%);
+  border-radius: var(--frame-radius);
+  padding:10px;
+  box-shadow:
+    0 8px 24px rgba(0,0,0,0.8),
+    0 0 30px rgba(0,0,0,0.6) inset;
+  position:relative;
+  pointer-events:auto;
+  transition: box-shadow .25s ease;
+  outline: 6px solid rgba(0,0,0,0.2);
+}
+
+/* neon rim that matches player's color */
+#frame::before{
+  content:'';
+  position:absolute;inset:6px;border-radius:calc(var(--frame-radius) - 6px);
   pointer-events:none;
+  box-shadow:
+    0 0 18px var(--neon),
+    0 0 64px var(--neon) inset,
+    0 0 8px rgba(255,255,255,0.02);
+  mix-blend-mode:screen;
 }
 
-/* Overlay */
+/* canvas centering */
+canvas#gameCanvas{
+  display:block;
+  background: #000;
+  border-radius:8px;
+  width:800px;height:600px;
+  image-rendering: pixelated;
+  margin:0 auto;
+  display:block;
+  position:relative;
+  z-index:1;
+}
+
+/* top UI */
+#uiTop{
+  position:absolute;left:18px;top:14px;display:flex;gap:10px;z-index:20;
+}
+#levelBox, #statusBox{
+  background:var(--panel);
+  padding:6px 10px;border-radius:8px;font-size:14px;color:var(--ui);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+}
+
+/* digital level top-right */
+#uiRight{position:absolute;right:18px;top:14px;z-index:20}
+#digitalLevel{background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:8px 12px;border-radius:8px;color:var(--neon);font-weight:700;letter-spacing:1px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+#digitalLevel span{font-weight:900}
+
+/* overlay (start menu) */
 #overlay{
-  pointer-events:auto;
-  position:absolute;
-  left:50%;
-  top:40%;
-  transform:translate(-50%,-40%);
-  background:var(--panel-bg);
-  padding:18px;
-  border-radius:12px;
-  text-align:center;
-  min-width:260px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.7);
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:linear-gradient(180deg,rgba(0,0,0,0.85), rgba(10,10,14,0.85));
+  padding:18px;border-radius:12px;z-index:30;min-width:280px;
+  box-shadow:0 12px 36px rgba(0,0,0,0.7);
 }
-#overlay h1{margin:0 0 12px;font-size:20px}
-#overlay label{display:block;margin:8px 0;font-size:14px}
-#overlay input[type="text"]{
-  width:100%;
-  padding:8px 10px;
-  border-radius:6px;border:1px solid #333;background:#0b0b0b;color:var(--ui-color);
+#overlay h1{font-size:22px;margin-bottom:8px;color:var(--neon)}
+#overlay label{display:block;margin:8px 0;font-size:13px;color:var(--ui)}
+#overlay input[type="text"], #overlay input[type="number"]{
+  width:100%;padding:8px;border-radius:8px;border:1px solid #222;background:#060608;color:var(--ui);
+  margin-top:6px;
 }
-#overlay input[type="range"]{width:100%}
-#overlay button{
-  margin-top:12px;
-  padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:black;font-weight:600;cursor:pointer;
-}
+#overlay input[type="range"]{width:100%;margin-top:6px}
+#overlay .controls-row{display:flex;gap:8px;margin-top:10px}
+#overlay button{flex:1;padding:10px;border-radius:8px;border:0;background:var(--neon);color:#000;font-weight:700;cursor:pointer}
 
-/* Top bar */
-#topbar{
-  pointer-events:auto;
-  position:fixed;left:12px;top:12px;display:flex;gap:8px;align-items:center;background:var(--panel-bg);padding:8px;border-radius:10px;
-}
-#topbar button{pointer-events:auto;padding:6px 10px;border-radius:8px;border:0;background:#333;color:#fff;cursor:pointer}
-#topbar.hidden{display:none}
-
-/* Message */
+/* message / countdown */
 #message{
-  pointer-events:auto;
-  position:fixed;
-  left:50%;
-  top:10%;
-  transform:translateX(-50%);
-  background:rgba(0,0,0,0.7);
-  padding:12px 16px;border-radius:10px;font-size:18px;
-}
-#message.hidden{display:none}
-
-/* Name labels */
-.name-label{
+  position:absolute;left:50%;top:38%;transform:translateX(-50%);
+  background:transparent;color:var(--neon);font-size:72px;font-weight:900;z-index:40;
+  text-shadow:0 0 26px rgba(0,0,0,0.6), 0 0 18px rgba(255,255,255,0.02);
   pointer-events:none;
-  font-size:12px;
-  text-shadow:0 0 6px #000;
-  color:#fff;
-  transform:translate(-50%,-120%);
+}
+#message.small{font-size:20px}
+
+/* bottom bar */
+#bottomBar{
+  position:absolute;left:14px;bottom:12px;right:14px;display:flex;justify-content:space-between;align-items:center;z-index:20;
+}
+#bottomBar button{padding:8px 12px;border-radius:8px;background:#111;border:1px solid #222;color:var(--ui);cursor:pointer}
+#playerIndicator{font-size:14px;color:var(--ui)}
+
+/* mobile controls */
+#mobileControls{
+  position:absolute;left:50%;bottom:20px;transform:translateX(-50%);display:flex;gap:12px;z-index:50;
+}
+.m-btn{
+  width:64px;height:64px;border-radius:12px;border:0;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));
+  color:var(--neon);font-size:28px;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,0.6);
 }
 
-/* small screens adaptation */
+/* small screens */
+@media (max-width:860px){
+  #frame{transform:scale(0.9);transform-origin:center center}
+}
 @media (max-width:420px){
-  #overlay{left:50%;top:35%}
-  #overlay h1{font-size:18px}
+  #frame{width:320px;padding:6px}
+  canvas#gameCanvas{width:300px;height:220px}
+  #overlay{min-width:260px}
+  .m-btn{width:54px;height:54px}
 }
