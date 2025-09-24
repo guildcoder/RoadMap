@@ -7,75 +7,95 @@
 
 html, body {
   height: 100%;
-  background-color: #00000; /* page background black */
+  background-color: #000;
   font-family: 'Orbitron', sans-serif;
-  color: #0ff;
   display: flex;
   justify-content: center;
   align-items: center;
+  color: #0ff;
+  overflow: hidden; /* prevent scrolling */
 }
 
 #pageContainer {
   text-align: center;
 }
 
-/* UI container above canvas */
+/* UI above canvas */
 #uiContainer {
   margin-bottom: 15px;
 }
 
 #uiContainer h1 {
-  font-size: 32px;
+  font-size: 36px;
   color: #0ff;
-  text-shadow: 0 0 12px #0ff;
+  text-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 30px #0ff;
   margin-bottom: 10px;
+  animation: flicker 1.5s infinite alternate;
+}
+
+@keyframes flicker {
+  0% { text-shadow: 0 0 5px #0ff, 0 0 10px #0ff; }
+  50% { text-shadow: 0 0 12px #0ff, 0 0 25px #0ff; }
+  100% { text-shadow: 0 0 8px #0ff, 0 0 15px #0ff; }
 }
 
 #uiContainer button {
   font-size: 18px;
-  padding: 12px 24px;
+  padding: 14px 28px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #0ff;
   color: #000;
   cursor: pointer;
   font-weight: 700;
-  box-shadow: 0 0 18px #0ff;
+  box-shadow: 0 0 20px #0ff, 0 0 40px #0ff inset;
   transition: 0.2s all;
 }
 
 #uiContainer button:hover {
-  box-shadow: 0 0 30px #0ff;
+  box-shadow: 0 0 35px #0ff, 0 0 70px #0ff inset;
   transform: scale(1.05);
 }
 
-/* Game canvas */
+/* Game canvas with neon border */
 #gameCanvas {
   display: block;
   margin: 0 auto 15px auto;
   background: #000;
   border: 6px solid #0ff;
   border-radius: 12px;
-  box-shadow: 0 0 30px #0ff, 0 0 60px #0ff inset;
+  box-shadow: 0 0 25px #0ff, 0 0 50px #0ff inset;
 }
 
-/* Spotify embed below canvas */
+/* Spotify embed with neon border */
 #spotifyContainer {
   margin-top: 10px;
+  display: inline-block;
+  border: 3px solid #0ff;
+  border-radius: 10px;
+  box-shadow: 0 0 20px #0ff;
+  overflow: hidden;
 }
 
-/* Floating messages on canvas */
+/* Floating messages (countdown / crash) */
 #message {
   position: absolute;
   top: 35%;
   left: 50%;
   transform: translateX(-50%);
   font-size: 48px;
-  color: #0ff;
   font-weight: 700;
-  text-shadow: 0 0 12px #0ff;
+  color: #0ff;
+  text-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 30px #0ff;
   z-index: 5;
   pointer-events: none;
+  animation: messageGlow 1s infinite alternate;
+}
+
+@keyframes messageGlow {
+  0% { text-shadow: 0 0 10px #0ff, 0 0 20px #0ff; }
+  50% { text-shadow: 0 0 18px #0ff, 0 0 36px #0ff; }
+  100% { text-shadow: 0 0 12px #0ff, 0 0 24px #0ff; }
 }
 
 /* Level indicator */
@@ -83,10 +103,33 @@ html, body {
   position: absolute;
   top: 10px;
   right: 10px;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #0ff;
-  text-shadow: 0 0 12px #0ff;
+  text-shadow: 0 0 8px #0ff, 0 0 16px #0ff;
   z-index: 5;
   pointer-events: none;
+  animation: flicker 1.5s infinite alternate;
+}
+
+/* Optional responsive tweaks for mobile */
+@media (max-width: 500px) {
+  #gameCanvas {
+    width: 90%;
+    height: auto;
+  }
+
+  #uiContainer h1 {
+    font-size: 28px;
+  }
+
+  #uiContainer button {
+    font-size: 16px;
+    padding: 10px 20px;
+  }
+
+  #spotifyContainer iframe {
+    width: 90%;
+    height: 70px;
+  }
 }
