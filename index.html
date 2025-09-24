@@ -1,134 +1,276 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Tron Grid Game</title>
+  <meta charset="utf-8"/>
+  <title>DIGIBIKE ROYALE</title>
   <style>
-    body {
-      margin: 0;
-      background: black;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
-    canvas {
-      display: block;
-      background: repeating-linear-gradient(
-          to right,
-          #0ff 0px,
-          #0ff 2px,
-          transparent 2px,
-          transparent 40px
-        ),
-        repeating-linear-gradient(
-          to bottom,
-          #0ff 0px,
-          #0ff 2px,
-          transparent 2px,
-          transparent 40px
-        );
-    }
+    body { margin:0; background:black; overflow:hidden; }
+    canvas { display:block; margin:0 auto; background:#000; }
   </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="700" height="500"></canvas>
-
+<canvas id="game"></canvas>
 <script>
-const canvas = document.getElementById("gameCanvas");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const gridSize = 5; // movement grid
-let trail = [];
-let maxTrail = 200; // longer trail
-let direction = "RIGHT";
-let nextDirection = "RIGHT";
+const MAP_SIZE = 2500;              
+const PLAYER_COUNT = 20;
+const TRAIL_POINT_LIMIT = 40;       
+const SPEED = 250;
+const PLAYER_SIZE = 10;
 
-let player = { x: 100, y: 100, size: 5 };
-let storm = { x: 50, y: 50, w: 600, h: 400 };
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+let keys = {};
+document.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; });
+document.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
-  // Draw storm
-  ctx.fillStyle = "rgba(255,0,0,0.3)";
-  ctx.fillRect(storm.x, storm.y, storm.w, storm.h);
-
-  // Draw trail
-  ctx.fillStyle = "cyan";
-  for (let i = 0; i < trail.length; i++) {
-    ctx.fillRect(trail[i].x, trail[i].y, player.size, player.size);
+class Player {
+  constructor(x, y, dir, color, isBot=false) {
+    this.x = x;
+    this.y = y;
+    this.dir = dir; // strictly 0, 90, 180, 270
+    this.color = color;
+    this.isBot = isBot;
+    this.trail = [];
+    this.alive = true;
+    this.speed = SPEED;
+    this.turnCooldown = 0; 
   }
 
-  // Draw player
-  ctx.fillStyle = "lime";
-  ctx.fillRect(player.x, player.y, player.size, player.size);
-}
-
-function update() {
-  direction = nextDirection;
-
-  if (direction === "LEFT") player.x -= gridSize;
-  if (direction === "UP") player.y -= gridSize;
-  if (direction === "RIGHT") player.x += gridSize;
-  if (direction === "DOWN") player.y += gridSize;
-
-  // Trail logic
-  trail.push({ x: player.x, y: player.y });
-  if (trail.length > maxTrail) {
-    trail.shift();
-  }
-
-  // Collision with walls
-  if (
-    player.x < 0 ||
-    player.y < 0 ||
-    player.x >= canvas.width ||
-    player.y >= canvas.height
-  ) {
-    gameOver();
-  }
-
-  // Collision with own trail
-  for (let i = 0; i < trail.length - 1; i++) {
-    if (player.x === trail[i].x && player.y === trail[i].y) {
-      gameOver();
+  recordTrailPoint(x, y) {
+    this.trail.push({x,y});
+    if(this.trail.length > TRAIL_POINT_LIMIT) {
+      this.trail.shift();
     }
   }
 
-  // Collision with storm
-  if (
-    player.x < storm.x ||
-    player.y < storm.y ||
-    player.x + player.size > storm.x + storm.w ||
-    player.y + player.size > storm.y + storm.h
-  ) {
-    gameOver();
+  die() { this.alive = false; }
+}
+
+let players = [];
+let player = new Player(MAP_SIZE/2, MAP_SIZE/2, 0, "cyan", false);
+players.push(player);
+
+// spawn bots
+for(let i=0; i<PLAYER_COUNT-1; i++){
+  let bot = new Player(
+    Math.random()*MAP_SIZE,
+    Math.random()*MAP_SIZE,
+    [0, Math.PI/2, Math.PI, -Math.PI/2][Math.floor(Math.random()*4)],
+    "hsl("+Math.random()*360+",100%,50%)",
+    true
+  );
+  players.push(bot);
+}
+
+let spectator = false;
+function enableSpectator(){ spectator = true; }
+
+function checkTrailCollisionFor(p) {
+  for(let other of players){
+    if(!other.alive) continue;
+    for(let pt of other.trail){
+      if(Math.abs(pt.x - p.x) < PLAYER_SIZE && Math.abs(pt.y - p.y) < PLAYER_SIZE){
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Storm shrinking
+let stormSize = MAP_SIZE;
+let stormTimer = 10;
+let shrinking = false;
+
+function updateStorm(dt){
+  stormTimer -= dt/1000;
+  if(stormTimer <= 0){
+    if(!shrinking){
+      shrinking = true;
+      stormTimer = 5; 
+    } else {
+      shrinking = false;
+      stormTimer = 10; 
+    }
+  }
+  if(shrinking){
+    stormSize -= 50*dt/1000;
+    if(stormSize < 200) stormSize = 200;
   }
 }
 
-function gameOver() {
-  alert("Game Over!");
-  player = { x: 100, y: 100, size: 5 };
-  trail = [];
-  direction = "RIGHT";
-  nextDirection = "RIGHT";
-}
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowLeft" && direction !== "RIGHT") nextDirection = "LEFT";
-  if (e.key === "ArrowUp" && direction !== "DOWN") nextDirection = "UP";
-  if (e.key === "ArrowRight" && direction !== "LEFT") nextDirection = "RIGHT";
-  if (e.key === "ArrowDown" && direction !== "UP") nextDirection = "DOWN";
+// minimap toggle
+let showLargeMap = false;
+document.addEventListener("keydown", e => {
+  if(e.key === "R" && e.shiftKey) showLargeMap = true;
+});
+document.addEventListener("keyup", e => {
+  if(e.key === "r") showLargeMap = false;
 });
 
-function gameLoop() {
-  update();
+// simulation
+let last = performance.now();
+function loop(now){
+  let dt = now - last;
+  last = now;
+  simulate(dt);
   draw();
+  requestAnimationFrame(loop);
 }
-setInterval(gameLoop, 60);
+requestAnimationFrame(loop);
+
+function simulate(dt){
+  updateStorm(dt);
+
+  // PLAYER movement (classic tron)
+  if(player.alive){
+    if(keys['arrowup'] || keys['w']) player.dir = -Math.PI/2;
+    else if(keys['arrowdown'] || keys['s']) player.dir = Math.PI/2;
+    else if(keys['arrowleft'] || keys['a']) player.dir = Math.PI;
+    else if(keys['arrowright'] || keys['d']) player.dir = 0;
+
+    player.x += Math.cos(player.dir) * player.speed * dt/1000;
+    player.y += Math.sin(player.dir) * player.speed * dt/1000;
+
+    player.recordTrailPoint(player.x, player.y);
+
+    if(checkTrailCollisionFor(player)) {
+      player.die();
+      enableSpectator();
+    }
+  }
+
+  // BOTS
+  for(let p of players){
+    if(p.isBot && p.alive){
+      p.x += Math.cos(p.dir)*p.speed*dt/1000;
+      p.y += Math.sin(p.dir)*p.speed*dt/1000;
+
+      p.recordTrailPoint(p.x,p.y);
+
+      p.turnCooldown -= dt/1000;
+      if(p.turnCooldown <= 0){
+        p.turnCooldown = 1 + Math.random()*2;
+        if(Math.random() < 0.5){ 
+          let dirs = [0, Math.PI/2, Math.PI, -Math.PI/2];
+          let newDir;
+          do {
+            newDir = dirs[Math.floor(Math.random()*4)];
+          } while(newDir === p.dir);
+          p.dir = newDir;
+        }
+      }
+
+      if(checkTrailCollisionFor(p)) p.die();
+    }
+  }
+}
+
+function draw(){
+  ctx.fillStyle = "black";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // camera
+  let cx, cy;
+  if(!spectator){ cx = player.x; cy = player.y; }
+  else {
+    let alive = players.filter(p=>p.alive);
+    if(alive.length>0){ cx = alive[0].x; cy = alive[0].y; }
+    else { cx = MAP_SIZE/2; cy = MAP_SIZE/2; }
+  }
+
+  let scale = 0.3;
+  ctx.save();
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.scale(scale, scale);
+  ctx.translate(-cx, -cy);
+
+  // draw grid background
+  ctx.strokeStyle = "rgba(0,255,255,0.2)";
+  ctx.lineWidth = 2;
+  for(let gx=0; gx<MAP_SIZE; gx+=50){
+    ctx.beginPath();
+    ctx.moveTo(gx,0);
+    ctx.lineTo(gx,MAP_SIZE);
+    ctx.stroke();
+  }
+  for(let gy=0; gy<MAP_SIZE; gy+=50){
+    ctx.beginPath();
+    ctx.moveTo(0,gy);
+    ctx.lineTo(MAP_SIZE,gy);
+    ctx.stroke();
+  }
+
+  // storm: outside = red
+  ctx.save();
+  ctx.fillStyle = "rgba(255,0,0,0.4)";
+  ctx.beginPath();
+  ctx.rect(0,0,MAP_SIZE,MAP_SIZE);
+  ctx.rect((MAP_SIZE-stormSize)/2, (MAP_SIZE-stormSize)/2, stormSize, stormSize);
+  ctx.fill("evenodd");
+  ctx.restore();
+
+  // storm border
+  ctx.strokeStyle = "purple";
+  ctx.lineWidth = 30;
+  ctx.strokeRect((MAP_SIZE-stormSize)/2, (MAP_SIZE-stormSize)/2, stormSize, stormSize);
+
+  // trails + players
+  for(let p of players){
+    ctx.strokeStyle = p.color;
+    ctx.beginPath();
+    for(let i=0;i<p.trail.length;i++){
+      let pt = p.trail[i];
+      if(i===0) ctx.moveTo(pt.x, pt.y);
+      else ctx.lineTo(pt.x, pt.y);
+    }
+    ctx.stroke();
+    if(p.alive){
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-PLAYER_SIZE/2, p.y-PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+    }
+  }
+
+  ctx.restore();
+
+  // HUD
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText("Players Alive: "+players.filter(p=>p.alive).length, canvas.width-20, 30);
+  ctx.fillText("Storm: "+stormTimer.toFixed(1), canvas.width-20, 50);
+
+  ctx.fillStyle = "red";
+  ctx.font = "bold 20px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("DIGIBIKE ROYALE", canvas.width/2, canvas.height-20);
+
+  drawMiniMap();
+}
+
+function drawMiniMap(){
+  let scale = showLargeMap ? 0.4 : 0.15;
+  let size = canvas.width*scale;
+  ctx.save();
+  ctx.translate(canvas.width - size - 10, 10);
+  ctx.scale(size/MAP_SIZE, size/MAP_SIZE);
+
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 10;
+  ctx.strokeRect((MAP_SIZE-stormSize)/2, (MAP_SIZE-stormSize)/2, stormSize, stormSize);
+
+  for(let p of players){
+    if(p.alive){
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 20, 20);
+    }
+  }
+  ctx.restore();
+}
 </script>
 </body>
 </html>
